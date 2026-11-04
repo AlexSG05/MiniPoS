@@ -1,0 +1,27 @@
+{
+  "matricula": "20204626",
+  "base": "http://127.0.0.1:8000",
+  "coleccion": "/productos",
+  "campo_id": "id",
+  "valido": {
+    "nombre": "Refresco 600 ml",
+    "precio": 20.0,
+    "stock": 15,
+    "codigo_barras": "7501234567890"
+  },
+  "invalido": {
+    "nombre": "",
+    "precio": -5,
+    "stock": -3,
+    "codigo_barras": ""
+  },
+  "metodo_cambio": "PUT",
+  "cambio": {
+    "nombre": "Refresco 600 ml actualizado",
+    "precio": 25.0,
+    "stock": 10,
+    "codigo_barras": "7501234567890"
+  },
+  "id_inexistente": "999999",
+  "encabezados": {}
+}
