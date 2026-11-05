@@ -12,8 +12,8 @@ app = FastAPI(title="Control de inventario de una tienda", version="1.0")
 
 # 1. Reglas definidas para los productos (el ID lo crea la API).
 class ProductoNuevo(BaseModel):
-    nombre: str = Field(..., min_length=1, examples=["Refresco 600 ml"])
-    precio: float = Field(..., gt=0, allow_inf_nan=False, examples=[20.0])
+    nombre: str = Field(..., min_length=1, examples=["Sabritas 50g"])
+    precio: float = Field(..., gt=0, allow_inf_nan=False, examples=[21.0])
     stock: int = Field(..., ge=0, examples=[15])
     codigo_barras: str = Field(..., min_length=1, examples=["7501234567890"])
 

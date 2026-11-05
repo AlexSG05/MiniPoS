@@ -1,27 +1,27 @@
 {
-  "matricula": "20204626",
+  "matricula": "20205341",
   "base": "http://127.0.0.1:8000",
   "coleccion": "/productos",
   "campo_id": "id",
   "valido": {
-    "nombre": "Refresco 600 ml",
-    "precio": 20.0,
-    "stock": 15,
-    "codigo_barras": "7501234567890"
+    "nombre": "Sabritas 50g",
+    "precio": 21.0,
+    "stock": 55,
+    "codigo_barras": "75012345676767"
   },
   "invalido": {
     "nombre": "",
-    "precio": -5,
-    "stock": -3,
+    "precio": -1,
+    "stock": -9,
     "codigo_barras": ""
   },
   "metodo_cambio": "PUT",
   "cambio": {
-    "nombre": "Refresco 600 ml actualizado",
-    "precio": 25.0,
-    "stock": 10,
-    "codigo_barras": "7501234567890"
+    "nombre": "SABRITAS 50G actualizado",
+    "precio": 21.0,
+    "stock": 11,
+    "codigo_barras": "67676767676767"
   },
-  "id_inexistente": "999999",
+  "id_inexistente": "99999999",
   "encabezados": {}
 }
