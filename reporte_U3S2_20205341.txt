@@ -1,4 +1,4 @@
-Probando http://127.0.0.1:8000/productos con la matrícula 20204626
+Probando http://127.0.0.1:8000/productos con la matrícula 20205341
 
 [OK]  1. POST con datos válidos crea (201)            -> 201
 [OK]  2. GET del recurso creado (200)                 -> 200
@@ -13,4 +13,4 @@ Probando http://127.0.0.1:8000/productos con la matrícula 20204626
 [OK] 11. GET después de borrar (404)                  -> 404
 
 RESULTADO: 11 de 11
-U3S2;20204626;http://127.0.0.1:8000/productos;11111111111;8788E219
+U3S2;20205341;http://127.0.0.1:8000/productos;11111111111;49E449E0
