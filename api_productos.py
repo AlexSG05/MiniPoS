@@ -1,33 +1,84 @@
-# api_productos.py — Control de inventario de una tienda
-# Basado en la estructura de la plantilla api_equipos.py de clase.
-# Datos almacenados en memoria; se reinician al detener el servidor.
+from pathlib import Path
+import sqlite3
 
 from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
-app = FastAPI(title="Control de inventario de una tienda", version="1.0")
+app = FastAPI(
+    title="Control de inventario de una tienda",
+    version="2.0"
+)
+
+BASE_DIR = Path(__file__).resolve().parent
+DB_PATH = BASE_DIR / "productos.db"
 
 
-# 1. Reglas definidas para los productos (el ID lo crea la API).
+def obtener_conexion():
+    conexion = sqlite3.connect(DB_PATH)
+    conexion.row_factory = sqlite3.Row
+    return conexion
+
+
+
+def inicializar_bd():
+    conexion = obtener_conexion()
+
+    try:
+        conexion.execute("""
+            CREATE TABLE IF NOT EXISTS productos (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                nombre TEXT NOT NULL,
+                precio REAL NOT NULL CHECK(precio > 0),
+                stock INTEGER NOT NULL CHECK(stock >= 0),
+                codigo_barras TEXT NOT NULL UNIQUE
+            )
+        """)
+        conexion.commit()
+    finally:
+        conexion.close()
+
+
+inicializar_bd()
+
+
+
 class ProductoNuevo(BaseModel):
-    nombre: str = Field(..., min_length=1, examples=["Sabritas 50g"])
-    precio: float = Field(..., gt=0, allow_inf_nan=False, examples=[21.0])
-    stock: int = Field(..., ge=0, examples=[15])
-    codigo_barras: str = Field(..., min_length=1, examples=["7501234567890"])
+    nombre: str = Field(
+        ...,
+        min_length=1,
+        examples=["Sabritas 50g"]
+    )
+
+    precio: float = Field(
+        ...,
+        gt=0,
+        allow_inf_nan=False,
+        examples=[21.0]
+    )
+
+    stock: int = Field(
+        ...,
+        ge=0,
+        examples=[15]
+    )
+
+    codigo_barras: str = Field(
+        ...,
+        min_length=1,
+        examples=["7501234567890"]
+    )
 
 
-# 2. Almacenamiento en memoria.
-productos = {}
-siguiente_id = 1
 
-
-# 3. Formato uniforme de errores.
 def error(codigo: int, mensaje: str, detalles=None):
     return JSONResponse(
         status_code=codigo,
-        content={"error": mensaje, "detalles": detalles or []},
+        content={
+            "error": mensaje,
+            "detalles": detalles or []
+        }
     )
 
 
@@ -39,12 +90,15 @@ async def error_http(request: Request, exc: HTTPException):
 @app.exception_handler(RequestValidationError)
 async def error_validacion(request: Request, exc: RequestValidationError):
     errores = exc.errors()
+
     if any(e["type"] == "json_invalid" for e in errores):
         return error(400, "El cuerpo no es un JSON válido")
+
     detalles = [
         f"{'.'.join(str(x) for x in e['loc'][1:])}: {e['msg']}"
         for e in errores
     ]
+
     return error(422, "Los datos no son válidos", detalles)
 
 
@@ -53,53 +107,211 @@ async def error_interno(request: Request, exc: Exception):
     return error(500, "Error interno del servidor")
 
 
+
 def buscar_producto(producto_id: int):
-    if producto_id not in productos:
-        raise HTTPException(404, f"No existe el producto {producto_id}")
-    return productos[producto_id]
+    conexion = obtener_conexion()
+
+    try:
+        cursor = conexion.execute(
+            "SELECT * FROM productos WHERE id = ?",
+            (producto_id,)
+        )
+
+        producto = cursor.fetchone()
+
+        if producto is None:
+            raise HTTPException(
+                status_code=404,
+                detail=f"No existe el producto {producto_id}"
+            )
+
+        return dict(producto)
+
+    finally:
+        conexion.close()
 
 
 def codigo_repetido(codigo_barras: str, excepto: int = 0):
-    return any(
-        p["codigo_barras"] == codigo_barras and p["id"] != excepto
-        for p in productos.values()
-    )
+    conexion = obtener_conexion()
+
+    try:
+        cursor = conexion.execute(
+            """
+            SELECT id FROM productos
+            WHERE codigo_barras = ? AND id != ?
+            """,
+            (codigo_barras, excepto)
+        )
+
+        return cursor.fetchone() is not None
+
+    finally:
+        conexion.close()
 
 
-# 4. Los cinco endpoints solicitados.
-@app.get("/productos", tags=["productos"])
+
+RESPUESTAS = {
+    404: {"description": "Producto no encontrado"},
+    409: {"description": "Conflicto: código de barras duplicado"},
+    422: {"description": "Datos de entrada no válidos"}
+}
+
+
+
+@app.get(
+    "/productos",
+    tags=["productos"],
+    responses={422: RESPUESTAS[422]}
+)
 def listar_productos():
-    return list(productos.values())
+    conexion = obtener_conexion()
+
+    try:
+        cursor = conexion.execute(
+            "SELECT * FROM productos ORDER BY id"
+        )
+
+        return [dict(fila) for fila in cursor.fetchall()]
+
+    finally:
+        conexion.close()
 
 
-@app.get("/productos/{producto_id}", tags=["productos"])
+
+@app.get(
+    "/productos/{producto_id}",
+    tags=["productos"],
+    responses={
+        404: RESPUESTAS[404],
+        422: RESPUESTAS[422]
+    }
+)
 def consultar_producto(producto_id: int):
     return buscar_producto(producto_id)
 
 
-@app.post("/productos", status_code=201, tags=["productos"])
+
+@app.post(
+    "/productos",
+    status_code=201,
+    tags=["productos"],
+    responses={
+        409: RESPUESTAS[409],
+        422: RESPUESTAS[422]
+    }
+)
 def crear_producto(datos: ProductoNuevo, response: Response):
-    global siguiente_id
-    if codigo_repetido(datos.codigo_barras):
-        raise HTTPException(409, "Ya existe un producto con ese código de barras")
-    nuevo = {"id": siguiente_id, **datos.model_dump()}
-    productos[siguiente_id] = nuevo
-    siguiente_id += 1
-    response.headers["Location"] = f"/productos/{nuevo['id']}"
-    return nuevo
+
+    conexion = obtener_conexion()
+
+    try:
+        cursor = conexion.execute(
+            """
+            INSERT INTO productos
+            (nombre, precio, stock, codigo_barras)
+            VALUES (?, ?, ?, ?)
+            """,
+            (
+                datos.nombre,
+                datos.precio,
+                datos.stock,
+                datos.codigo_barras
+            )
+        )
+
+        nuevo_id = cursor.lastrowid
+        conexion.commit()
+
+    except sqlite3.IntegrityError:
+        conexion.rollback()
+
+        raise HTTPException(
+            status_code=409,
+            detail="Ya existe un producto con ese código de barras"
+        )
+
+    finally:
+        conexion.close()
+
+    response.headers["Location"] = f"/productos/{nuevo_id}"
+
+    return buscar_producto(nuevo_id)
 
 
-@app.put("/productos/{producto_id}", tags=["productos"])
+
+@app.put(
+    "/productos/{producto_id}",
+    tags=["productos"],
+    responses={
+        404: RESPUESTAS[404],
+        409: RESPUESTAS[409],
+        422: RESPUESTAS[422]
+    }
+)
 def reemplazar_producto(producto_id: int, datos: ProductoNuevo):
+
+    
     buscar_producto(producto_id)
-    if codigo_repetido(datos.codigo_barras, excepto=producto_id):
-        raise HTTPException(409, "Ya existe un producto con ese código de barras")
-    productos[producto_id] = {"id": producto_id, **datos.model_dump()}
-    return productos[producto_id]
+
+    conexion = obtener_conexion()
+
+    try:
+        conexion.execute(
+            """
+            UPDATE productos
+            SET nombre = ?, precio = ?, stock = ?, codigo_barras = ?
+            WHERE id = ?
+            """,
+            (
+                datos.nombre,
+                datos.precio,
+                datos.stock,
+                datos.codigo_barras,
+                producto_id
+            )
+        )
+
+        conexion.commit()
+
+    except sqlite3.IntegrityError:
+        conexion.rollback()
+
+        raise HTTPException(
+            status_code=409,
+            detail="Ya existe un producto con ese código de barras"
+        )
+
+    finally:
+        conexion.close()
+
+    return buscar_producto(producto_id)
 
 
-@app.delete("/productos/{producto_id}", status_code=204, tags=["productos"])
+
+@app.delete(
+    "/productos/{producto_id}",
+    status_code=204,
+    tags=["productos"],
+    responses={
+        404: RESPUESTAS[404],
+        422: RESPUESTAS[422]
+    }
+)
 def eliminar_producto(producto_id: int):
+
     buscar_producto(producto_id)
-    del productos[producto_id]
+
+    conexion = obtener_conexion()
+
+    try:
+        conexion.execute(
+            "DELETE FROM productos WHERE id = ?",
+            (producto_id,)
+        )
+
+        conexion.commit()
+
+    finally:
+        conexion.close()
+
     return Response(status_code=204)
