@@ -1,16 +1,20 @@
-Probando http://127.0.0.1:8000/productos con la matrícula 20206742
+Probando http://127.0.0.1:8000/productos con la matrícula 20205341
 
 [OK]  1. POST con datos válidos crea (201)            -> 201
 [OK]  2. GET del recurso creado (200)                 -> 200
 [OK]  3. GET de la colección lo incluye (200)         -> 200
 [OK]  4. POST inválido se rechaza (422 o 400)         -> 422
-[OK]  5. …y no se guardó nada (la foto no cambió)     antes 1, después 1
+[OK]  5. …y no se guardó nada (la foto no cambió)     antes 2, después 2
 [OK]  6. …y el error viene en JSON                    
 [OK]  7. JSON roto: 400/422 con error en JSON         -> 400
 [OK]  8. GET de uno que no existe (404)               -> 404
 [OK]  9. PUT dos veces: misma foto                    -> 200 y 200
 [OK] 10. DELETE dos veces (204/200 y luego 404)       -> 204 y 404
 [OK] 11. GET después de borrar (404)                  -> 404
+[OK] 12. El contrato OpenAPI existe (/openapi.json)   -> 200
+[OK] 13. …documenta la colección y /{id}              
+[OK] 14. …y documenta 201, 404 y 422                  
+[OK] 15. Los datos sobreviven a un reinicio           
 
-RESULTADO: 11 de 11
-U3S2;20206742;http://127.0.0.1:8000/productos;11111111111;A9814224
+RESULTADO: 15 de 15
+U3S3;20205341;http://127.0.0.1:8000/productos;111111111111111;FAE8A2CD

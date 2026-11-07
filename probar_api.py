@@ -1,5 +1,8 @@
-# probar_api.py — Prueba automática del CRUD de tu proyecto
-# Programación Distribuida · Unidad III, Sesión 2
+# probar_api.py (versión 2) — Pruebas automáticas de tu API
+# Programación Distribuida · Unidad III, Sesión 3
+#
+# Versión 2: además de las 11 pruebas del CRUD, revisa el contrato OpenAPI (12–14)
+# y que los datos sobrevivan a un reinicio del servidor (15).
 #
 # Funciona con cualquier lenguaje (Python, Node, PHP…): solo habla HTTP con tu API.
 # No necesita instalar nada: usa únicamente la biblioteca estándar de Python.
@@ -8,10 +11,14 @@
 #   1. Edita prueba.json con los datos de TU recurso.
 #   2. Con tu API corriendo en otra terminal:
 #        python probar_api.py
-#   3. Pega en el artefacto todo lo que imprime (también queda en reporte_U3S2_<matrícula>.txt).
+#   3. La primera vez, la prueba 15 queda pendiente: reinicia tu API (Ctrl+C y vuelve
+#      a correrla) y corre otra vez probar_api.py.
+#   4. Pega en el artefacto todo lo que imprime (también queda en reporte_U3S3_<matrícula>.txt).
 
 import hashlib
 import json
+import os
+import re
 import sys
 import urllib.error
 import urllib.request
@@ -36,6 +43,8 @@ CAMBIO = cfg.get("cambio", VALIDO)
 METODO_CAMBIO = cfg.get("metodo_cambio", "PUT").upper()
 ID_INEXISTENTE = str(cfg.get("id_inexistente", "999999"))
 ENCABEZADOS = cfg.get("encabezados", {})
+OPENAPI = "/" + str(cfg.get("openapi", "/openapi.json")).strip("/")
+ESTADO = f".persistencia_U3S3_{MAT}_{hashlib.sha256((BASE + COL).encode()).hexdigest()[:6]}.json"
 
 if not (MAT.isdigit() and len(MAT) == 8):
     sys.exit("En prueba.json, \"matricula\" debe ser tu matrícula de 8 dígitos.")
@@ -109,6 +118,20 @@ def es_error_json(cuerpo_texto):
 
 print(f"Probando {BASE}{COL} con la matrícula {MAT}\n")
 
+# 15 (parte 2). ¿Sigue ahí el registro que dejamos antes de reiniciar?
+persistio = None
+if os.path.exists(ESTADO):
+    try:
+        with open(ESTADO, encoding="utf-8") as f:
+            guardado = json.load(f)
+    except (OSError, json.JSONDecodeError):
+        guardado = {}
+    if guardado.get("url") == BASE + COL and guardado.get("id"):
+        c, _, t = pedir("GET", f"{COL}/{guardado['id']}")
+        persistio = c == 200 and contiene(objeto_de(como_json(t)), VALIDO)
+        pedir("DELETE", f"{COL}/{guardado['id']}")          # lo limpiamos para no chocar con la prueba 1
+    os.remove(ESTADO)
+
 # 1. Crear
 c, h, t = pedir("POST", COL, VALIDO)
 creado = objeto_de(como_json(t))
@@ -177,18 +200,47 @@ registrar(10, "DELETE dos veces (204/200 y luego 404)", c1 in (200, 204) and c2 
 c, _, _ = pedir("GET", UNO)
 registrar(11, "GET después de borrar (404)", c == 404, f"-> {c}")
 
+# 12–14. El contrato OpenAPI
+c, h, t = pedir("GET", OPENAPI)
+es_openapi = c == 200 and re.search(r'["\']?openapi["\']?\s*:\s*["\']?3\.', t) is not None
+registrar(12, f"El contrato OpenAPI existe ({OPENAPI})", es_openapi,
+          f"-> {c}" + ("" if es_openapi or c != 200 else "  (no dice openapi: 3.x)"))
+col_re = re.escape(COL)
+documenta = es_openapi and re.search(col_re + r'["\']?\s*:', t) is not None and re.search(col_re + r'/\{[^}]+\}', t) is not None
+registrar(13, "…documenta la colección y /{id}", documenta, "" if documenta else f"no encuentro {COL} y {COL}/{{id}}")
+cods = [k for k in ("201", "404", "422") if re.search(r'(["\']' + k + r'["\']|^\s*' + k + r')\s*:', t, re.M)]
+ok14 = es_openapi and len(cods) == 3
+registrar(14, "…y documenta 201, 404 y 422", ok14, "" if ok14 else f"solo encontré: {', '.join(cods) or 'ninguno'}")
+
+# 15. Persistencia
+if persistio is None:
+    c, h, t = pedir("POST", COL, VALIDO)
+    obj = objeto_de(como_json(t))
+    pid = str(obj[CAMPO_ID]) if isinstance(obj, dict) and CAMPO_ID in obj else None
+    if c == 201 and pid:
+        with open(ESTADO, "w", encoding="utf-8") as f:
+            json.dump({"url": BASE + COL, "id": pid}, f)
+        registrar(15, "Los datos sobreviven a un reinicio", False, "PENDIENTE: reinicia tu API y vuelve a correr la prueba")
+    else:
+        registrar(15, "Los datos sobreviven a un reinicio", False, f"no pude crear el registro de prueba (-> {c})")
+else:
+    registrar(15, "Los datos sobreviven a un reinicio", persistio,
+              "" if persistio else "el registro desapareció: ¿sigues guardando en memoria?")
+
 bits = "".join(resultados)
-codigo = hashlib.sha256(f"{MAT}|U3S2|{bits}".encode()).hexdigest()[:8].upper()
+codigo = hashlib.sha256(f"{MAT}|U3S3|{bits}".encode()).hexdigest()[:8].upper()
 total = bits.count("1")
 fin = [
     "",
     f"RESULTADO: {total} de {len(bits)}",
-    f"U3S2;{MAT};{BASE}{COL};{bits};{codigo}",
+    f"U3S3;{MAT};{BASE}{COL};{bits};{codigo}",
 ]
 for x in fin:
     print(x)
 salida.extend(fin)
 
-with open(f"reporte_U3S2_{MAT}.txt", "w", encoding="utf-8") as f:
+with open(f"reporte_U3S3_{MAT}.txt", "w", encoding="utf-8") as f:
     f.write(f"Probando {BASE}{COL} con la matrícula {MAT}\n\n" + "\n".join(salida) + "\n")
-print(f"\nGuardado en reporte_U3S2_{MAT}.txt. Pégalo completo en el artefacto.")
+if persistio is None and os.path.exists(ESTADO):
+    print("\n>>> Falta la prueba 15: reinicia tu API (Ctrl+C y vuelve a correrla) y corre otra vez: python probar_api.py")
+print(f"\nGuardado en reporte_U3S3_{MAT}.txt. Pégalo completo en el artefacto.")
