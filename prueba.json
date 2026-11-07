@@ -8,7 +8,7 @@
     "nombre": "lechuga",
     "precio": 450.00,
     "stock": 15,
-    "codigo_barras": "7501234567881"
+    "codigo_barras": "7501234567871"
   },
   "invalido": {
     "nombre": "",
@@ -21,7 +21,7 @@
     "nombre": "lechuga premium",
     "precio": 550.00,
     "stock": 20,
-    "codigo_barras": "7501234567882"
+    "codigo_barras": "7501234567872"
 },
   "id_inexistente": "999999",
   "openapi": "/openapi.json",
