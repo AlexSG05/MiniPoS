@@ -1,8 +1,9 @@
-# probar_api.py (versión 2) — Pruebas automáticas de tu API
-# Programación Distribuida · Unidad III, Sesión 3
+# probar_api.py (versión 3) — Pruebas automáticas de tu API
+# Programación Distribuida · Unidad III, Sesión 4
 #
-# Versión 2: además de las 11 pruebas del CRUD, revisa el contrato OpenAPI (12–14)
-# y que los datos sobrevivan a un reinicio del servidor (15).
+# Versión 3: las 15 pruebas de la sesión 3 (CRUD, contrato y reinicio), ahora con sesión,
+# más 5 de seguridad: login (16), sin token (17), token alterado (18), rol (19) y dueño (20).
+# Las pruebas 1 a 15 se hacen con el token del usuario "admin" de prueba.json.
 #
 # Funciona con cualquier lenguaje (Python, Node, PHP…): solo habla HTTP con tu API.
 # No necesita instalar nada: usa únicamente la biblioteca estándar de Python.
@@ -13,7 +14,7 @@
 #        python probar_api.py
 #   3. La primera vez, la prueba 15 queda pendiente: reinicia tu API (Ctrl+C y vuelve
 #      a correrla) y corre otra vez probar_api.py.
-#   4. Pega en el artefacto todo lo que imprime (también queda en reporte_U3S3_<matrícula>.txt).
+#   4. Pega en el artefacto todo lo que imprime (también queda en reporte_U3S4_<matrícula>.txt).
 
 import hashlib
 import json
@@ -44,7 +45,14 @@ METODO_CAMBIO = cfg.get("metodo_cambio", "PUT").upper()
 ID_INEXISTENTE = str(cfg.get("id_inexistente", "999999"))
 ENCABEZADOS = cfg.get("encabezados", {})
 OPENAPI = "/" + str(cfg.get("openapi", "/openapi.json")).strip("/")
-ESTADO = f".persistencia_U3S3_{MAT}_{hashlib.sha256((BASE + COL).encode()).hexdigest()[:6]}.json"
+AUTH = cfg.get("auth", {})
+LOGIN = "/" + str(AUTH.get("login", "/login")).strip("/")
+CAMPO_TOKEN = AUTH.get("campo_token", "access_token")
+ADMIN, USUARIO, OTRO = AUTH.get("admin", {}), AUTH.get("usuario", {}), AUTH.get("otro", {})
+PROPIO = cfg.get("propio", {})
+PROPIO_COL = "/" + str(PROPIO.get("coleccion", "")).strip("/")
+PROPIO_VALIDO = PROPIO.get("valido", {})
+ESTADO = f".persistencia_U3S4_{MAT}_{hashlib.sha256((BASE + COL).encode()).hexdigest()[:6]}.json"
 
 if not (MAT.isdigit() and len(MAT) == 8):
     sys.exit("En prueba.json, \"matricula\" debe ser tu matrícula de 8 dígitos.")
@@ -52,12 +60,23 @@ if not VALIDO or not INVALIDO:
     sys.exit("En prueba.json faltan \"valido\" o \"invalido\".")
 if METODO_CAMBIO not in ("PUT", "PATCH"):
     sys.exit("\"metodo_cambio\" debe ser PUT o PATCH.")
+if not (ADMIN and USUARIO and OTRO):
+    sys.exit("En prueba.json falta \"auth\" con \"admin\", \"usuario\" y \"otro\" (los tres usuarios de prueba).")
+if not (PROPIO_COL.strip("/") and PROPIO_VALIDO):
+    sys.exit("En prueba.json falta \"propio\": la colección con dueño y un \"valido\" para crear ahí.")
 
 
-def pedir(metodo, ruta, cuerpo=None, crudo=None):
-    """Manda una petición y regresa (código, encabezados, cuerpo_texto)."""
+TOKEN_ADMIN = None   # se llena después del login; las pruebas 1-15 lo usan
+
+
+def pedir(metodo, ruta, cuerpo=None, crudo=None, token="admin"):
+    """Manda una petición y regresa (código, encabezados, cuerpo_texto).
+    token="admin" usa el del administrador; None no manda token; cualquier otro texto se manda tal cual."""
     datos = crudo.encode() if crudo is not None else (json.dumps(cuerpo).encode() if cuerpo is not None else None)
     h = {"Accept": "application/json", **ENCABEZADOS}
+    t = TOKEN_ADMIN if token == "admin" else token
+    if t:
+        h["Authorization"] = f"Bearer {t}"
     if datos is not None:
         h["Content-Type"] = "application/json"
     req = urllib.request.Request(BASE + ruta, data=datos, method=metodo, headers=h)
@@ -117,6 +136,32 @@ def es_error_json(cuerpo_texto):
 
 
 print(f"Probando {BASE}{COL} con la matrícula {MAT}\n")
+
+
+def token_de(texto):
+    obj = como_json(texto)
+    if isinstance(obj, dict):
+        for k in (CAMPO_TOKEN, "access_token", "token", "jwt"):
+            if isinstance(obj.get(k), str) and obj[k].count(".") == 2:
+                return obj[k]
+        for v in obj.values():   # {"datos": {"token": ...}}
+            if isinstance(v, dict):
+                for k in (CAMPO_TOKEN, "access_token", "token"):
+                    if isinstance(v.get(k), str) and v[k].count(".") == 2:
+                        return v[k]
+    return None
+
+
+def entrar(cred):
+    c, _, t = pedir("POST", LOGIN, cred, token=None)
+    return c, t, token_de(t)
+
+
+c_adm, t_adm, TOKEN_ADMIN = entrar(ADMIN)
+if not TOKEN_ADMIN:
+    print(f"No pude iniciar sesión como admin en POST {LOGIN} (-> {c_adm}).")
+    print(f"Respuesta: {t_adm[:200]}")
+    sys.exit("Revisa \"auth\" en prueba.json: la ruta de login, los datos del admin y \"campo_token\".")
 
 # 15 (parte 2). ¿Sigue ahí el registro que dejamos antes de reiniciar?
 persistio = None
@@ -213,11 +258,13 @@ ok14 = es_openapi and len(cods) == 3
 registrar(14, "…y documenta 201, 404 y 422", ok14, "" if ok14 else f"solo encontré: {', '.join(cods) or 'ninguno'}")
 
 # 15. Persistencia
+PID15 = None
 if persistio is None:
     c, h, t = pedir("POST", COL, VALIDO)
     obj = objeto_de(como_json(t))
     pid = str(obj[CAMPO_ID]) if isinstance(obj, dict) and CAMPO_ID in obj else None
     if c == 201 and pid:
+        PID15 = pid
         with open(ESTADO, "w", encoding="utf-8") as f:
             json.dump({"url": BASE + COL, "id": pid}, f)
         registrar(15, "Los datos sobreviven a un reinicio", False, "PENDIENTE: reinicia tu API y vuelve a correr la prueba")
@@ -227,20 +274,89 @@ else:
     registrar(15, "Los datos sobreviven a un reinicio", persistio,
               "" if persistio else "el registro desapareció: ¿sigues guardando en memoria?")
 
+# 16. Login: clave incorrecta -> 401; correcta -> token y sin la clave en la respuesta
+mala = dict(USUARIO)
+campo_clave = list(mala)[-1]                     # el último campo del login es la clave
+mala[campo_clave] = str(mala[campo_clave]) + "x"
+c_mal, _, t_mal = pedir("POST", LOGIN, mala, token=None)
+c_ok, t_ok, TOKEN_USUARIO = entrar(USUARIO)
+_, _, TOKEN_OTRO = entrar(OTRO)
+filtra = str(USUARIO[campo_clave]) in t_ok
+ok16 = c_mal == 401 and es_error_json(t_mal) and c_ok == 200 and TOKEN_USUARIO is not None and not filtra
+registrar(16, "Login: clave mala 401; buena da token", ok16,
+          f"-> {c_mal} y {c_ok}" + ("  (¡la respuesta incluye la clave!)" if filtra else "")
+          + ("" if TOKEN_USUARIO else "  (no encontré el token del usuario)") + ("" if TOKEN_OTRO else "  (no pude entrar como \"otro\")"))
+
+# 17. Sin token: escribir en la colección -> 401 y no se guarda
+_, _, ta = pedir("GET", COL)
+la = lista_de(como_json(ta))
+c, _, t = pedir("POST", COL, VALIDO, token=None)
+_, _, tb = pedir("GET", COL)
+lb = lista_de(como_json(tb))
+no_guardo = isinstance(la, list) and isinstance(lb, list) and len(la) == len(lb)
+if c in (200, 201):                               # si lo dejó crear, lo limpiamos
+    o = objeto_de(como_json(t))
+    if isinstance(o, dict) and CAMPO_ID in o:
+        pedir("DELETE", f"{COL}/{o[CAMPO_ID]}")
+registrar(17, "Sin token: POST se rechaza (401)", c == 401 and no_guardo and es_error_json(t), f"-> {c}")
+
+# 18. Token alterado (un carácter de la firma) -> 401
+alterado = None
+if TOKEN_USUARIO:
+    alterado = TOKEN_USUARIO[:-2] + ("A" if TOKEN_USUARIO[-2] != "A" else "B") + TOKEN_USUARIO[-1]
+c, _, t = pedir("GET", PROPIO_COL, token=alterado) if alterado else (0, {}, "")
+registrar(18, "Token alterado se rechaza (401)", c == 401, f"-> {c}" if alterado else "sin token de usuario")
+
+# 19. Rol: el usuario normal no puede borrar en la colección del admin -> 403 (o 404)
+c, _, t = pedir("POST", COL, VALIDO)
+o = objeto_de(como_json(t))
+rid = str(o[CAMPO_ID]) if isinstance(o, dict) and CAMPO_ID in o else None
+limpiar = rid is not None
+if rid is None and PID15:          # primera corrida: ya existe el registro de la prueba 15; usamos ese
+    rid = PID15
+if rid and TOKEN_USUARIO:
+    c19, _, t19 = pedir("DELETE", f"{COL}/{rid}", token=TOKEN_USUARIO)
+    sigue, _, _ = pedir("GET", f"{COL}/{rid}")
+    ok19 = c19 in (403, 404) and sigue == 200
+    registrar(19, "Rol sin permiso: DELETE se rechaza (403)", ok19,
+              f"-> {c19}" + ("  (¡lo borró!)" if sigue != 200 else ""))
+    if limpiar:
+        pedir("DELETE", f"{COL}/{rid}")
+else:
+    registrar(19, "Rol sin permiso: DELETE se rechaza (403)", False, "no pude crear el recurso de prueba como admin")
+
+# 20. Dueño (SEC-311): lo que crea "usuario" no lo ve "otro"
+ok20, det20 = False, ""
+if TOKEN_USUARIO and TOKEN_OTRO:
+    c, h, t = pedir("POST", PROPIO_COL, PROPIO_VALIDO, token=TOKEN_USUARIO)
+    o = objeto_de(como_json(t))
+    pid = str(o[CAMPO_ID]) if isinstance(o, dict) and CAMPO_ID in o else None
+    if c == 201 and pid:
+        c_otro, _, _ = pedir("GET", f"{PROPIO_COL}/{pid}", token=TOKEN_OTRO)
+        c_dueno, _, _ = pedir("GET", f"{PROPIO_COL}/{pid}", token=TOKEN_USUARIO)
+        ok20 = c_otro in (403, 404) and c_dueno == 200
+        det20 = f"otro -> {c_otro}, dueño -> {c_dueno}" + ("  (¡otro usuario lo pudo ver!)" if c_otro == 200 else "")
+        pedir("DELETE", f"{PROPIO_COL}/{pid}", token=TOKEN_USUARIO)
+    else:
+        det20 = f"el usuario no pudo crear en {PROPIO_COL} (-> {c})"
+else:
+    det20 = "faltan los tokens de usuario y otro"
+registrar(20, "Dueño: otro usuario no ve lo ajeno", ok20, det20)
+
 bits = "".join(resultados)
-codigo = hashlib.sha256(f"{MAT}|U3S3|{bits}".encode()).hexdigest()[:8].upper()
+codigo = hashlib.sha256(f"{MAT}|U3S4|{bits}".encode()).hexdigest()[:8].upper()
 total = bits.count("1")
 fin = [
     "",
     f"RESULTADO: {total} de {len(bits)}",
-    f"U3S3;{MAT};{BASE}{COL};{bits};{codigo}",
+    f"U3S4;{MAT};{BASE}{COL};{bits};{codigo}",
 ]
 for x in fin:
     print(x)
 salida.extend(fin)
 
-with open(f"reporte_U3S3_{MAT}.txt", "w", encoding="utf-8") as f:
+with open(f"reporte_U3S4_{MAT}.txt", "w", encoding="utf-8") as f:
     f.write(f"Probando {BASE}{COL} con la matrícula {MAT}\n\n" + "\n".join(salida) + "\n")
 if persistio is None and os.path.exists(ESTADO):
     print("\n>>> Falta la prueba 15: reinicia tu API (Ctrl+C y vuelve a correrla) y corre otra vez: python probar_api.py")
-print(f"\nGuardado en reporte_U3S3_{MAT}.txt. Pégalo completo en el artefacto.")
+print(f"\nGuardado en reporte_U3S4_{MAT}.txt. Pégalo completo en el artefacto.")
