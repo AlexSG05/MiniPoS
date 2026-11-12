@@ -1,51 +1,29 @@
 
 {
-    "matricula": "20205341",
-    "base": "http://127.0.0.1:8000",
-    "coleccion": "/productos",
-    "campo_id": "id",
-    "valido": {
-        "nombre": "Producto de prueba",
-        "precio": 25.50,
-        "stock": 10,
-        "codigo_barras": "7500000000534"
-    },
-    "invalido": {
-        "nombre": "Producto inválido",
-        "precio": -5,
-        "stock": 10,
-        "codigo_barras": "7500000000999"
-    },
-    "cambio": {
-        "nombre": "Producto actualizado",
-        "precio": 30.00,
-        "stock": 15,
-        "codigo_barras": "7500000000541"
-    },
-    "metodo_cambio": "PUT",
-    "id_inexistente": "999999",
-    "openapi": "/openapi.json",
-    "auth": {
-        "login": "/login",
-        "campo_token": "access_token",
-        "admin": {
-            "usuario": "encargado",
-            "clave": "encargado123"
-        },
-        "usuario": {
-            "usuario": "ana",
-            "clave": "ana12345"
-        },
-        "otro": {
-            "usuario": "beto",
-            "clave": "beto12345"
-        }
-    },
-    "propio": {
-        "coleccion": "/ventas",
-        "valido": {
-            "descripcion": "Venta de prueba de Ana",
-            "total": 100.00
-        }
-    }
+  "matricula": "20205341",
+  "base": "http://127.0.0.1:8000",
+  "coleccion": "/productos",
+  "campo_id": "id",
+  "valido": {
+    "nombre": "lechuga",
+    "precio": 450.00,
+    "stock": 15,
+    "codigo_barras": "7501234567871"
+  },
+  "invalido": {
+    "nombre": "",
+    "precio": -50,
+    "stock": -5,
+    "codigo_barras": ""
+  },
+  "metodo_cambio": "PUT",
+  "cambio": {
+    "nombre": "lechuga premium",
+    "precio": 550.00,
+    "stock": 20,
+    "codigo_barras": "7501234567872"
+},
+  "id_inexistente": "999999",
+  "openapi": "/openapi.json",
+  "encabezados": {}
 }
