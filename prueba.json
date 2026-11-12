@@ -1,51 +1,59 @@
-
 {
-    "matricula": "20205341",
-    "base": "http://127.0.0.1:8000",
-    "coleccion": "/productos",
-    "campo_id": "id",
-    "valido": {
-        "nombre": "Producto de prueba",
-        "precio": 25.50,
-        "stock": 10,
-        "codigo_barras": "7500000000534"
+  "matricula": "20204626",
+  "base": "http://127.0.0.1:8000",
+  "coleccion": "/productos",
+  "campo_id": "id",
+  "valido": {
+    "nombre": "Producto de prueba",
+    "precio": 25.50,
+    "stock": 10,
+    "codigo_barras": "7500000000534"
+  },
+  "invalido": {
+    "nombre": "Producto inválido",
+    "precio": -5,
+    "stock": 10,
+    "codigo_barras": "7500000000999"
+  },
+  "cambio": {
+    "nombre": "Producto actualizado",
+    "precio": 30.00,
+    "stock": 15,
+    "codigo_barras": "7500000000541"
+  },
+  "metodo_cambio": "PUT",
+  "id_inexistente": "999999",
+  "openapi": "/openapi.json",
+  "auth": {
+    "login": "/login",
+    "campo_token": "access_token",
+    "admin": {
+      "usuario": "encargado",
+      "clave": "encargado123"
     },
-    "invalido": {
-        "nombre": "Producto inválido",
-        "precio": -5,
-        "stock": 10,
-        "codigo_barras": "7500000000999"
+    "usuario": {
+      "usuario": "ana",
+      "clave": "ana12345"
     },
-    "cambio": {
-        "nombre": "Producto actualizado",
-        "precio": 30.00,
-        "stock": 15,
-        "codigo_barras": "7500000000541"
-    },
-    "metodo_cambio": "PUT",
-    "id_inexistente": "999999",
-    "openapi": "/openapi.json",
-    "auth": {
-        "login": "/login",
-        "campo_token": "access_token",
-        "admin": {
-            "usuario": "encargado",
-            "clave": "encargado123"
-        },
-        "usuario": {
-            "usuario": "ana",
-            "clave": "ana12345"
-        },
-        "otro": {
-            "usuario": "beto",
-            "clave": "beto12345"
-        }
-    },
-    "propio": {
-        "coleccion": "/ventas",
-        "valido": {
-            "descripcion": "Venta de prueba de Ana",
-            "total": 100.00
-        }
+    "otro": {
+      "usuario": "beto",
+      "clave": "beto12345"
     }
+  },
+  "propio": {
+    "coleccion": "/ventas",
+    "valido": {
+      "descripcion": "Venta de prueba de Ana",
+      "total": 100.00
+    }
+  },
+  "externo": {
+    "metodo": "POST",
+    "ruta": "/productos/descripcion",
+    "cuerpo": {
+      "nombre": "Coca-Cola 600ml"
+    },
+    "token": "admin",
+    "real": ""
+  }
 }

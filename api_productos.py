@@ -12,7 +12,8 @@ from fastapi.responses import JSONResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, Field
 
-
+import json, os, urllib.request, urllib.error
+from fastapi import HTTPException
 
 SECRETO = os.environ.get(
     "JWT_SECRETO",
@@ -34,8 +35,6 @@ app = FastAPI(
 )
 
 bearer = HTTPBearer(auto_error=False)
-
-
 
 def obtener_conexion():
     conexion = sqlite3.connect(DB_PATH)
@@ -617,3 +616,51 @@ def eliminar_venta(
         conexion.close()
 
     return Response(status_code=204)
+
+# -----------Sesión 5 ----------------
+IA_URL = os.environ.get("EXTERNO_URL", "https://generativelanguage.googleapis.com")
+IA_MODELO = os.environ.get("GEMINI_MODELO", "gemini-flash-lite-latest")
+IA_CLAVE = os.environ.get("GEMINI_API_KEY", "")
+
+
+def preguntar_a_la_ia(instruccion: str) -> dict:
+    """Le pregunta algo a Gemini y regresa el JSON que contestó. Si algo sale mal, responde 502/503/504."""
+    if not IA_CLAVE and "googleapis.com" in IA_URL:
+        raise HTTPException(503, "Falta configurar la variable de entorno GEMINI_API_KEY")
+    cuerpo = {"contents": [{"parts": [{"text": instruccion}]}],
+              "generationConfig": {"responseMimeType": "application/json", "temperature": 0}}
+    req = urllib.request.Request(f"{IA_URL}/v1beta/models/{IA_MODELO}:generateContent",
+                                 data=json.dumps(cuerpo).encode(), method="POST",
+                                 headers={"Content-Type": "application/json", "x-goog-api-key": IA_CLAVE})
+    try:                                                         # IDEA 1: su API llama a otra API
+        with urllib.request.urlopen(req, timeout=5) as r:        # IDEA 2: máximo 5 segundos esperando
+            respuesta = json.loads(r.read())
+        return json.loads(respuesta["candidates"][0]["content"]["parts"][0]["text"])
+    except TimeoutError:
+        raise HTTPException(504, "La IA tardó demasiado en responder. Intenta en un momento.")
+    except urllib.error.HTTPError as e:
+        raise HTTPException(502, f"La IA no está disponible (respondió {e.code}). Intenta más tarde.")
+    except urllib.error.URLError as e:
+        if isinstance(e.reason, TimeoutError):
+            raise HTTPException(504, "La IA tardó demasiado en responder. Intenta en un momento.")
+        raise HTTPException(502, "No se pudo conectar con la IA.")
+    except (ValueError, KeyError, IndexError, TypeError):
+        raise HTTPException(502, "La IA respondió algo que no entendemos.")
+
+# ---------- Su endpoint con IA ----------
+
+INSTRUCCION_IA = ('Eres el encargado de una tienda de abarrotes. Para el producto que te doy, responde SOLO un JSON con la forma {"categoria": "abarrotes" | "bebidas" | "limpieza" | "papeleria" | "otro", "descripcion": "descripción para el ticket, máximo 12 palabras"}.\n'
+                  'Producto: ')
+
+class EntradaProductosDescripcion(BaseModel):
+    nombre: str = Field(..., min_length=2, max_length=300)
+
+
+@app.post("/productos/descripcion")
+def productos_descripcion(datos: EntradaProductosDescripcion, yo: dict = Depends(usuario_actual)):
+    ia = preguntar_a_la_ia(INSTRUCCION_IA + datos.nombre)
+    # Nunca confíen en lo que responde la IA: revisen que trae lo que pidieron
+    if not isinstance(ia, dict) or ia.get("categoria") not in ("abarrotes", "bebidas", "limpieza", "papeleria", "otro") or not ia.get("descripcion"):
+        raise HTTPException(502, "La IA respondió algo inesperado.")
+    return {"categoria": ia["categoria"], "descripcion": str(ia.get("descripcion", ""))[:200]}
+#-----------------------Termina sesión 5 ---------------------
