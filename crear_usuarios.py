@@ -14,8 +14,8 @@ CREATE TABLE IF NOT EXISTS usuarios (
 
 usuarios = [
     ("admin", "admin123", "administrador"),
-    ("alex", "alex12345", "alumno"),
-    ("juan", "juan12345", "alumno")
+    ("alex", "alex12345", "cajero"),
+    ("juan", "juan12345", "cajero")
 ]
 
 for usuario, clave, rol in usuarios:

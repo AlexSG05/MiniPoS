@@ -1,18 +1,40 @@
-from pathlib import Path
-import sqlite3
 
-from fastapi import FastAPI, HTTPException, Request, Response
+from pathlib import Path
+import os
+import sqlite3
+from datetime import datetime, timedelta, timezone
+
+import bcrypt
+import jwt
+from fastapi import Depends, FastAPI, HTTPException, Request, Response
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, Field
 
-app = FastAPI(
-    title="Control de inventario de una tienda",
-    version="2.0"
+
+
+SECRETO = os.environ.get(
+    "JWT_SECRETO",
+    "clave-de-desarrollo-cambiala-en-produccion-2026"
 )
+ALGORITMO = "HS256"
+DURACION_TOKEN_MINUTOS = 30
 
 BASE_DIR = Path(__file__).resolve().parent
 DB_PATH = BASE_DIR / "productos.db"
+
+app = FastAPI(
+    title="MiniPoS - Control de inventario",
+    description=(
+        "API de inventario con autenticación JWT, autorización por roles "
+        "y control de propiedad de ventas (SEC-311/BOLA)."
+    ),
+    version="3.0"
+)
+
+bearer = HTTPBearer(auto_error=False)
+
 
 
 def obtener_conexion():
@@ -21,10 +43,9 @@ def obtener_conexion():
     return conexion
 
 
-
 def inicializar_bd():
+    """Crea las tablas y agrega usuarios de demostración sin duplicarlos."""
     conexion = obtener_conexion()
-
     try:
         conexion.execute("""
             CREATE TABLE IF NOT EXISTS productos (
@@ -35,6 +56,52 @@ def inicializar_bd():
                 codigo_barras TEXT NOT NULL UNIQUE
             )
         """)
+
+        conexion.execute("""
+            CREATE TABLE IF NOT EXISTS usuarios (
+                usuario TEXT PRIMARY KEY,
+                clave_hash TEXT NOT NULL,
+                rol TEXT NOT NULL
+            )
+        """)
+
+        conexion.execute("""
+            CREATE TABLE IF NOT EXISTS ventas (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                descripcion TEXT NOT NULL,
+                total REAL NOT NULL CHECK(total > 0),
+                usuario TEXT NOT NULL,
+                fecha TEXT NOT NULL,
+                FOREIGN KEY(usuario) REFERENCES usuarios(usuario)
+            )
+        """)
+
+        usuarios_demo = [
+            ("encargado", "encargado123", "encargado"),
+            ("ana", "ana12345", "cajero"),
+            ("beto", "beto12345", "cajero"),
+        ]
+
+        for usuario, clave, rol in usuarios_demo:
+            existe = conexion.execute(
+                "SELECT 1 FROM usuarios WHERE usuario = ?",
+                (usuario,)
+            ).fetchone()
+
+            if existe is None:
+                clave_hash = bcrypt.hashpw(
+                    clave.encode("utf-8"),
+                    bcrypt.gensalt(rounds=12)
+                ).decode("utf-8")
+
+                conexion.execute(
+                    """
+                    INSERT INTO usuarios (usuario, clave_hash, rol)
+                    VALUES (?, ?, ?)
+                    """,
+                    (usuario, clave_hash, rol)
+                )
+
         conexion.commit()
     finally:
         conexion.close()
@@ -43,33 +110,62 @@ def inicializar_bd():
 inicializar_bd()
 
 
+class Credenciales(BaseModel):
+    usuario: str = Field(..., min_length=1)
+    clave: str = Field(..., min_length=1)
+
 
 class ProductoNuevo(BaseModel):
-    nombre: str = Field(
+    nombre: str = Field(..., min_length=1, examples=["Sabritas 50g"])
+    precio: float = Field(..., gt=0, allow_inf_nan=False, examples=[21.0])
+    stock: int = Field(..., ge=0, examples=[15])
+    codigo_barras: str = Field(..., min_length=1, examples=["7501234567890"])
+
+
+class VentaNueva(BaseModel):
+    descripcion: str = Field(
         ...,
         min_length=1,
-        examples=["Sabritas 50g"]
+        examples=["Venta de prueba"]
     )
+    total: float = Field(..., gt=0, allow_inf_nan=False, examples=[100.0])
 
-    precio: float = Field(
-        ...,
-        gt=0,
-        allow_inf_nan=False,
-        examples=[21.0]
-    )
 
-    stock: int = Field(
-        ...,
-        ge=0,
-        examples=[15]
-    )
+class ErrorRespuesta(BaseModel):
+    error: str
+    detalles: list[str] = []
 
-    codigo_barras: str = Field(
-        ...,
-        min_length=1,
-        examples=["7501234567890"]
-    )
 
+E401 = {
+    401: {
+        "model": ErrorRespuesta,
+        "description": "Falta el token, es inválido o ya expiró"
+    }
+}
+E403 = {
+    403: {
+        "model": ErrorRespuesta,
+        "description": "El rol del usuario no tiene permiso"
+    }
+}
+E404 = {
+    404: {
+        "model": ErrorRespuesta,
+        "description": "El recurso no existe o no pertenece al usuario"
+    }
+}
+E409 = {
+    409: {
+        "model": ErrorRespuesta,
+        "description": "Conflicto: código de barras duplicado"
+    }
+}
+E422 = {
+    422: {
+        "model": ErrorRespuesta,
+        "description": "Datos de entrada no válidos"
+    }
+}
 
 
 def error(codigo: int, mensaje: str, detalles=None):
@@ -98,7 +194,6 @@ async def error_validacion(request: Request, exc: RequestValidationError):
         f"{'.'.join(str(x) for x in e['loc'][1:])}: {e['msg']}"
         for e in errores
     ]
-
     return error(422, "Los datos no son válidos", detalles)
 
 
@@ -106,109 +201,186 @@ async def error_validacion(request: Request, exc: RequestValidationError):
 async def error_interno(request: Request, exc: Exception):
     return error(500, "Error interno del servidor")
 
+@app.post(
+    "/login",
+    tags=["autenticación"],
+    responses={
+        401: {
+            "model": ErrorRespuesta,
+            "description": "Usuario o clave incorrectos"
+        },
+        422: E422[422]
+    }
+)
+def login(c: Credenciales):
+    conexion = obtener_conexion()
+    try:
+        fila = conexion.execute(
+            """
+            SELECT usuario, clave_hash, rol
+            FROM usuarios
+            WHERE usuario = ?
+            """,
+            (c.usuario,)
+        ).fetchone()
+
+        if fila is None or not bcrypt.checkpw(
+            c.clave.encode("utf-8"),
+            fila["clave_hash"].encode("utf-8")
+        ):
+            raise HTTPException(
+                status_code=401,
+                detail="Usuario o clave incorrectos"
+            )
+
+        ahora = datetime.now(timezone.utc)
+        token = jwt.encode(
+            {
+                "sub": fila["usuario"],
+                "rol": fila["rol"],
+                "iat": ahora,
+                "exp": ahora + timedelta(minutes=DURACION_TOKEN_MINUTOS)
+            },
+            SECRETO,
+            algorithm=ALGORITMO
+        )
+
+        return {
+            "access_token": token,
+            "token_type": "bearer"
+        }
+    finally:
+        conexion.close()
+
+
+
+def usuario_actual(
+    cred: HTTPAuthorizationCredentials = Depends(bearer)
+) -> dict:
+    if cred is None:
+        raise HTTPException(
+            status_code=401,
+            detail="Falta el token: inicia sesión en POST /login"
+        )
+
+    try:
+        datos = jwt.decode(
+            cred.credentials,
+            SECRETO,
+            algorithms=["HS256"]
+        )
+
+        usuario = datos.get("sub")
+        rol = datos.get("rol")
+        if not usuario or not rol:
+            raise jwt.InvalidTokenError("Faltan claims requeridos")
+
+        return {"usuario": usuario, "rol": rol}
+
+    except jwt.InvalidTokenError:
+        raise HTTPException(
+            status_code=401,
+            detail="El token no es válido o ya expiró"
+        )
+
+
+@app.get(
+    "/yo",
+    tags=["autenticación"],
+    responses={**E401}
+)
+def ver_usuario(yo: dict = Depends(usuario_actual)):
+    return yo
+
+
+
+def solo_encargado(yo: dict = Depends(usuario_actual)) -> dict:
+    if yo["rol"] != "encargado":
+        raise HTTPException(
+            status_code=403,
+            detail="Tu rol no puede hacer esto"
+        )
+    return yo
 
 
 def buscar_producto(producto_id: int):
     conexion = obtener_conexion()
-
     try:
-        cursor = conexion.execute(
+        producto = conexion.execute(
             "SELECT * FROM productos WHERE id = ?",
             (producto_id,)
-        )
-
-        producto = cursor.fetchone()
+        ).fetchone()
 
         if producto is None:
             raise HTTPException(
                 status_code=404,
                 detail=f"No existe el producto {producto_id}"
             )
-
         return dict(producto)
-
     finally:
         conexion.close()
 
 
 def codigo_repetido(codigo_barras: str, excepto: int = 0):
     conexion = obtener_conexion()
-
     try:
-        cursor = conexion.execute(
+        fila = conexion.execute(
             """
             SELECT id FROM productos
             WHERE codigo_barras = ? AND id != ?
             """,
             (codigo_barras, excepto)
-        )
-
-        return cursor.fetchone() is not None
-
+        ).fetchone()
+        return fila is not None
     finally:
         conexion.close()
-
-
-
-RESPUESTAS = {
-    404: {"description": "Producto no encontrado"},
-    409: {"description": "Conflicto: código de barras duplicado"},
-    422: {"description": "Datos de entrada no válidos"}
-}
-
 
 
 @app.get(
     "/productos",
     tags=["productos"],
-    responses={422: RESPUESTAS[422]}
+    responses={**E401, 422: E422[422]}
 )
-def listar_productos():
+def listar_productos(yo: dict = Depends(usuario_actual)):
     conexion = obtener_conexion()
-
     try:
-        cursor = conexion.execute(
+        filas = conexion.execute(
             "SELECT * FROM productos ORDER BY id"
-        )
-
-        return [dict(fila) for fila in cursor.fetchall()]
-
+        ).fetchall()
+        return [dict(fila) for fila in filas]
     finally:
         conexion.close()
-
 
 
 @app.get(
     "/productos/{producto_id}",
     tags=["productos"],
-    responses={
-        404: RESPUESTAS[404],
-        422: RESPUESTAS[422]
-    }
+    responses={**E401, **E404, 422: E422[422]}
 )
-def consultar_producto(producto_id: int):
+def consultar_producto(
+    producto_id: int,
+    yo: dict = Depends(usuario_actual)
+):
     return buscar_producto(producto_id)
-
 
 
 @app.post(
     "/productos",
     status_code=201,
     tags=["productos"],
-    responses={
-        409: RESPUESTAS[409],
-        422: RESPUESTAS[422]
-    }
+    responses={**E401, **E403, **E409, 422: E422[422]}
 )
-def crear_producto(datos: ProductoNuevo, response: Response):
-
+def crear_producto(
+    datos: ProductoNuevo,
+    response: Response,
+    yo: dict = Depends(solo_encargado)
+):
     conexion = obtener_conexion()
-
     try:
         cursor = conexion.execute(
             """
             INSERT INTO productos
-            (nombre, precio, stock, codigo_barras)
+                (nombre, precio, stock, codigo_barras)
             VALUES (?, ?, ?, ?)
             """,
             (
@@ -218,43 +390,33 @@ def crear_producto(datos: ProductoNuevo, response: Response):
                 datos.codigo_barras
             )
         )
-
         nuevo_id = cursor.lastrowid
         conexion.commit()
-
     except sqlite3.IntegrityError:
         conexion.rollback()
-
         raise HTTPException(
             status_code=409,
             detail="Ya existe un producto con ese código de barras"
         )
-
     finally:
         conexion.close()
 
     response.headers["Location"] = f"/productos/{nuevo_id}"
-
     return buscar_producto(nuevo_id)
-
 
 
 @app.put(
     "/productos/{producto_id}",
     tags=["productos"],
-    responses={
-        404: RESPUESTAS[404],
-        409: RESPUESTAS[409],
-        422: RESPUESTAS[422]
-    }
+    responses={**E401, **E403, **E404, **E409, 422: E422[422]}
 )
-def reemplazar_producto(producto_id: int, datos: ProductoNuevo):
-
-    
+def reemplazar_producto(
+    producto_id: int,
+    datos: ProductoNuevo,
+    yo: dict = Depends(solo_encargado)
+):
     buscar_producto(producto_id)
-
     conexion = obtener_conexion()
-
     try:
         conexion.execute(
             """
@@ -270,47 +432,187 @@ def reemplazar_producto(producto_id: int, datos: ProductoNuevo):
                 producto_id
             )
         )
-
         conexion.commit()
-
     except sqlite3.IntegrityError:
         conexion.rollback()
-
         raise HTTPException(
             status_code=409,
             detail="Ya existe un producto con ese código de barras"
         )
-
     finally:
         conexion.close()
 
     return buscar_producto(producto_id)
 
 
-
 @app.delete(
     "/productos/{producto_id}",
     status_code=204,
     tags=["productos"],
-    responses={
-        404: RESPUESTAS[404],
-        422: RESPUESTAS[422]
-    }
+    responses={**E401, **E403, **E404, 422: E422[422]}
 )
-def eliminar_producto(producto_id: int):
-
+def eliminar_producto(
+    producto_id: int,
+    yo: dict = Depends(solo_encargado)
+):
     buscar_producto(producto_id)
-
     conexion = obtener_conexion()
-
     try:
         conexion.execute(
             "DELETE FROM productos WHERE id = ?",
             (producto_id,)
         )
-
         conexion.commit()
+    finally:
+        conexion.close()
 
+    return Response(status_code=204)
+
+
+def buscar_venta_propia(venta_id: int, usuario: str):
+    conexion = obtener_conexion()
+    try:
+        fila = conexion.execute(
+            """
+            SELECT id, descripcion, total, usuario, fecha
+            FROM ventas
+            WHERE id = ? AND usuario = ?
+            """,
+            (venta_id, usuario)
+        ).fetchone()
+
+        if fila is None:
+            raise HTTPException(
+                status_code=404,
+                detail=f"No existe la venta {venta_id}"
+            )
+        return dict(fila)
+    finally:
+        conexion.close()
+
+
+@app.post(
+    "/ventas",
+    status_code=201,
+    tags=["ventas propias"],
+    responses={**E401, 422: E422[422]}
+)
+def crear_venta(
+    datos: VentaNueva,
+    response: Response,
+    yo: dict = Depends(usuario_actual)
+):
+    fecha = datetime.now(timezone.utc).isoformat()
+    conexion = obtener_conexion()
+    try:
+        cursor = conexion.execute(
+            """
+            INSERT INTO ventas (descripcion, total, usuario, fecha)
+            VALUES (?, ?, ?, ?)
+            """,
+            (
+                datos.descripcion,
+                datos.total,
+                yo["usuario"],  
+                fecha
+            )
+        )
+        venta_id = cursor.lastrowid
+        conexion.commit()
+    finally:
+        conexion.close()
+
+    response.headers["Location"] = f"/ventas/{venta_id}"
+    return buscar_venta_propia(venta_id, yo["usuario"])
+
+
+@app.get(
+    "/ventas",
+    tags=["ventas propias"],
+    responses={**E401, 422: E422[422]}
+)
+def listar_ventas_propias(yo: dict = Depends(usuario_actual)):
+    conexion = obtener_conexion()
+    try:
+        filas = conexion.execute(
+            """
+            SELECT id, descripcion, total, usuario, fecha
+            FROM ventas
+            WHERE usuario = ?
+            ORDER BY id
+            """,
+            (yo["usuario"],)
+        ).fetchall()
+        return [dict(fila) for fila in filas]
+    finally:
+        conexion.close()
+
+
+@app.get(
+    "/ventas/{venta_id}",
+    tags=["ventas propias"],
+    responses={**E401, **E404, 422: E422[422]}
+)
+def consultar_venta(
+    venta_id: int,
+    yo: dict = Depends(usuario_actual)
+):
+    return buscar_venta_propia(venta_id, yo["usuario"])
+
+
+@app.put(
+    "/ventas/{venta_id}",
+    tags=["ventas propias"],
+    responses={**E401, **E404, 422: E422[422]}
+)
+def reemplazar_venta(
+    venta_id: int,
+    datos: VentaNueva,
+    yo: dict = Depends(usuario_actual)
+):
+    buscar_venta_propia(venta_id, yo["usuario"])
+
+    conexion = obtener_conexion()
+    try:
+        conexion.execute(
+            """
+            UPDATE ventas
+            SET descripcion = ?, total = ?
+            WHERE id = ? AND usuario = ?
+            """,
+            (
+                datos.descripcion,
+                datos.total,
+                venta_id,
+                yo["usuario"]
+            )
+        )
+        conexion.commit()
+    finally:
+        conexion.close()
+
+    return buscar_venta_propia(venta_id, yo["usuario"])
+
+
+@app.delete(
+    "/ventas/{venta_id}",
+    status_code=204,
+    tags=["ventas propias"],
+    responses={**E401, **E404, 422: E422[422]}
+)
+def eliminar_venta(
+    venta_id: int,
+    yo: dict = Depends(usuario_actual)
+):
+    buscar_venta_propia(venta_id, yo["usuario"])
+
+    conexion = obtener_conexion()
+    try:
+        conexion.execute(
+            "DELETE FROM ventas WHERE id = ? AND usuario = ?",
+            (venta_id, yo["usuario"])
+        )
+        conexion.commit()
     finally:
         conexion.close()
 

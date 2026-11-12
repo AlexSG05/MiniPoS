@@ -15,6 +15,11 @@ Probando http://127.0.0.1:8000/productos con la matrícula 20205341
 [OK] 13. …documenta la colección y /{id}              
 [OK] 14. …y documenta 201, 404 y 422                  
 [OK] 15. Los datos sobreviven a un reinicio           
+[OK] 16. Login: clave mala 401; buena da token        -> 401 y 200
+[OK] 17. Sin token: POST se rechaza (401)             -> 401
+[OK] 18. Token alterado se rechaza (401)              -> 401
+[OK] 19. Rol sin permiso: DELETE se rechaza (403)     -> 403
+[OK] 20. Dueño: otro usuario no ve lo ajeno           otro -> 404, dueño -> 200
 
-RESULTADO: 15 de 15
-U3S3;20205341;http://127.0.0.1:8000/productos;111111111111111;FAE8A2CD
+RESULTADO: 20 de 20
+U3S4;20205341;http://127.0.0.1:8000/productos;11111111111111111111;899BA737
