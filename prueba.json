@@ -1,25 +1,26 @@
+
 {
-  "matricula": "20204626",
+  "matricula": "20205341",
   "base": "http://127.0.0.1:8000",
   "coleccion": "/productos",
   "campo_id": "id",
   "valido": {
-    "nombre": "Producto de prueba",
-    "precio": 25.50,
-    "stock": 10,
-    "codigo_barras": "7500000000534"
+    "nombre": "Producto de prueba Alex",
+    "precio": 35.50,
+    "stock": 20,
+    "codigo_barras": "7500000001534"
   },
   "invalido": {
     "nombre": "Producto inválido",
     "precio": -5,
     "stock": 10,
-    "codigo_barras": "7500000000999"
+    "codigo_barras": "7500000001999"
   },
   "cambio": {
-    "nombre": "Producto actualizado",
-    "precio": 30.00,
-    "stock": 15,
-    "codigo_barras": "7500000000541"
+    "nombre": "Producto actualizado Alex",
+    "precio": 40.00,
+    "stock": 25,
+    "codigo_barras": "7500000001541"
   },
   "metodo_cambio": "PUT",
   "id_inexistente": "999999",
@@ -43,15 +44,15 @@
   "propio": {
     "coleccion": "/ventas",
     "valido": {
-      "descripcion": "Venta de prueba de Ana",
-      "total": 100.00
+      "descripcion": "Venta de prueba de Alex",
+      "total": 150.00
     }
   },
   "externo": {
     "metodo": "POST",
     "ruta": "/productos/descripcion",
     "cuerpo": {
-      "nombre": "Coca-Cola 600ml"
+      "nombre": "Coca-Cola 600 ml"
     },
     "token": "admin",
     "real": ""
