@@ -1,10 +1,11 @@
-# probar_api.py (versión 4) — Pruebas automáticas de tu API
-# Programación Distribuida · Unidad III, Sesión 5
+# probar_api.py (versión 5) — Pruebas automáticas de tu API
+# Programación Distribuida · Unidad III, Sesión 6
 #
-# Versión 4: las 20 pruebas de la sesión 4 (CRUD, contrato, reinicio y seguridad) más 5 de
-# integración con un servicio externo, usando el simulador de fallas (simulador.py):
-#   21 normal · 22 el externo tarda · 23 falla una vez · 24 responde 400 · 25 responde basura.
-# Su API debe estar corriendo con  EXTERNO_URL=http://127.0.0.1:9000  (ver la guía).
+# Versión 5: las 25 pruebas de la sesión 5 más 3 de CORS (el front de su proyecto):
+#   26 su página (el "origen" de prueba.json) recibe permiso · 27 una página ajena NO lo recibe
+#   28 la pregunta previa (OPTIONS) acepta el encabezado Authorization.
+# En prueba.json:  "cors": {"origen": "http://127.0.0.1:5500"}   (si no lo ponen, se usa ese)
+# Las 21-25 siguen usando el simulador: su API debe correr con  EXTERNO_URL=http://127.0.0.1:9000
 #
 # Funciona con cualquier lenguaje (Python, Node, PHP…): solo habla HTTP con tu API.
 # No necesita instalar nada: usa únicamente la biblioteca estándar de Python.
@@ -15,7 +16,7 @@
 #        python probar_api.py
 #   3. La primera vez, la prueba 15 queda pendiente: reinicia tu API (Ctrl+C y vuelve
 #      a correrla) y corre otra vez probar_api.py.
-#   4. Pega en el artefacto todo lo que imprime (también queda en reporte_U3S5_<matrícula>.txt).
+#   4. Pega en el artefacto todo lo que imprime (también queda en reporte_U3S6_<matrícula>.txt).
 
 import hashlib
 import json
@@ -56,7 +57,7 @@ PROPIO_COL = "/" + str(PROPIO.get("coleccion", "")).strip("/")
 PROPIO_VALIDO = PROPIO.get("valido", {})
 EXTERNO = cfg.get("externo", {})
 SIM_URL = str(EXTERNO.get("simulador", "http://127.0.0.1:9000")).rstrip("/")
-ESTADO = f".persistencia_U3S5_{MAT}_{hashlib.sha256((BASE + COL).encode()).hexdigest()[:6]}.json"
+ESTADO = f".persistencia_U3S6_{MAT}_{hashlib.sha256((BASE + COL).encode()).hexdigest()[:6]}.json"
 
 if not (MAT.isdigit() and len(MAT) == 8):
     sys.exit("En prueba.json, \"matricula\" debe ser tu matrícula de 8 dígitos.")
@@ -426,20 +427,58 @@ try:
 except Exception:
     pass
 
+# 26-28. CORS: ¿qué páginas pueden usar su API desde el navegador?
+CORS = cfg.get("cors", {}) if isinstance(cfg.get("cors"), dict) else {}
+ORIGEN = str(CORS.get("origen", "http://127.0.0.1:5500")).rstrip("/")
+AJENO = "http://sitio-ajeno.example"
+RUTA_CORS = "/" + str(CORS.get("ruta", COL)).strip("/")
+
+
+def con_origen(metodo, origen, extra=None):
+    h = {"Origin": origen, **(extra or {})}
+    req = urllib.request.Request(BASE + RUTA_CORS, method=metodo, headers=h)
+    try:
+        with urllib.request.urlopen(req, timeout=10) as r:
+            return r.status, {k.lower(): v for k, v in r.headers.items()}
+    except urllib.error.HTTPError as e:
+        return e.code, {k.lower(): v for k, v in e.headers.items()}
+    except OSError:
+        return None, {}
+
+
+c, h = con_origen("GET", ORIGEN)
+acao = h.get("access-control-allow-origin")
+registrar(26, "CORS: su página recibe permiso", acao in (ORIGEN, "*"),
+          f"-> Access-Control-Allow-Origin: {acao}" if acao else
+          f"-> {c} sin Access-Control-Allow-Origin  (¿agregaron {ORIGEN} a su lista de CORS?)")
+c, h = con_origen("GET", AJENO)
+acao = h.get("access-control-allow-origin")
+registrar(27, "CORS: una página ajena NO recibe permiso", acao not in ("*", AJENO),
+          "-> sin permiso, bien" if not acao else f"-> Access-Control-Allow-Origin: {acao}  (usen una lista de orígenes, no \"*\")")
+c, h = con_origen("OPTIONS", ORIGEN, {"Access-Control-Request-Method": "POST",
+                                       "Access-Control-Request-Headers": "authorization, content-type"})
+ah = h.get("access-control-allow-headers", "").lower()
+am = h.get("access-control-allow-methods", "").upper()
+ok28 = (c is not None and 200 <= c < 300 and h.get("access-control-allow-origin") in (ORIGEN, "*")
+        and ("authorization" in ah or ah.strip() == "*") and ("POST" in am or am.strip() == "*"))
+registrar(28, "CORS: la pregunta previa acepta Authorization", ok28,
+          f"-> {c}" + ("" if ok28 else ("  (¿responden OPTIONS antes de pedir el token?)" if c in (401, 403, 404, 405)
+                                        else f"  (Allow-Headers: {ah or 'ninguno'}; Allow-Methods: {am or 'ninguno'})")))
+
 bits = "".join(resultados)
-codigo = hashlib.sha256(f"{MAT}|U3S5|{bits}".encode()).hexdigest()[:8].upper()
+codigo = hashlib.sha256(f"{MAT}|U3S6|{bits}".encode()).hexdigest()[:8].upper()
 total = bits.count("1")
 fin = [
     "",
     f"RESULTADO: {total} de {len(bits)}",
-    f"U3S5;{MAT};{BASE}{COL};{bits};{codigo}",
+    f"U3S6;{MAT};{BASE}{COL};{bits};{codigo}",
 ]
 for x in fin:
     print(x)
 salida.extend(fin)
 
-with open(f"reporte_U3S5_{MAT}.txt", "w", encoding="utf-8") as f:
+with open(f"reporte_U3S6_{MAT}.txt", "w", encoding="utf-8") as f:
     f.write(f"Probando {BASE}{COL} con la matrícula {MAT}\n\n" + "\n".join(salida) + "\n")
 if persistio is None and os.path.exists(ESTADO):
     print("\n>>> Falta la prueba 15: reinicia tu API (Ctrl+C y vuelve a correrla) y corre otra vez: python probar_api.py")
-print(f"\nGuardado en reporte_U3S5_{MAT}.txt. Pégalo completo en el artefacto.")
+print(f"\nGuardado en reporte_U3S6_{MAT}.txt. Pégalo completo en el artefacto.")

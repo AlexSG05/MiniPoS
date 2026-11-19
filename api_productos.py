@@ -33,6 +33,18 @@ app = FastAPI(
     ),
     version="3.0"
 )
+# ---------- CORS: qué páginas pueden usar su API desde el navegador ----------
+import os
+from fastapi.middleware.cors import CORSMiddleware
+
+ORIGENES = os.environ.get("CORS_ORIGENES", "http://127.0.0.1:5500,http://localhost:5500").split(",")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=ORIGENES,                           # una lista, nunca ["*"]
+    allow_methods=["GET", "POST", "PUT", "DELETE"],
+    allow_headers=["Authorization", "Content-Type"],  # sin Authorization, el token no pasa la pregunta previa
+)
 
 bearer = HTTPBearer(auto_error=False)
 
@@ -653,6 +665,8 @@ def preguntar_a_la_ia(instruccion: str) -> dict:
             raise HTTPException(502, f"La IA no está disponible (respondió {e.code}). Intenta más tarde.")
 
         except urllib.error.URLError as e:
+            print("ERROR DE CONEXION CON GEMINI:", repr(e))
+
             if isinstance(e.reason, TimeoutError):
                 raise HTTPException(504, "La IA tardó demasiado en responder. Intenta en un momento.")
 
@@ -660,7 +674,6 @@ def preguntar_a_la_ia(instruccion: str) -> dict:
                 continue
 
             raise HTTPException(502, "No se pudo conectar con la IA.")
-
         except (ValueError, KeyError, IndexError, TypeError):
             raise HTTPException(502, "La IA respondió algo que no entendemos.")
 

@@ -4,7 +4,7 @@ Probando http://127.0.0.1:8000/productos con la matrícula 20205341
 [OK]  2. GET del recurso creado (200)                 -> 200
 [OK]  3. GET de la colección lo incluye (200)         -> 200
 [OK]  4. POST inválido se rechaza (422 o 400)         -> 422
-[OK]  5. …y no se guardó nada (la foto no cambió)     antes 2, después 2
+[OK]  5. …y no se guardó nada (la foto no cambió)     antes 3, después 3
 [OK]  6. …y el error viene en JSON                    
 [OK]  7. JSON roto: 400/422 con error en JSON         -> 400
 [OK]  8. GET de uno que no existe (404)               -> 404
@@ -25,6 +25,9 @@ Probando http://127.0.0.1:8000/productos con la matrícula 20205341
 [OK] 23. Externo falla 1 vez: reintenta y responde 2xx -> 200, 2 llamada(s)
 [OK] 24. Externo responde 400: NO reintenta           -> 502, 1 llamada(s)
 [OK] 25. Externo responde basura: 502 en JSON         -> 502
+[OK] 26. CORS: su página recibe permiso               -> Access-Control-Allow-Origin: http://127.0.0.1:5500
+[OK] 27. CORS: una página ajena NO recibe permiso     -> sin permiso, bien
+[OK] 28. CORS: la pregunta previa acepta Authorization -> 200
 
-RESULTADO: 25 de 25
-U3S5;20205341;http://127.0.0.1:8000/productos;1111111111111111111111111;0BF91B41
+RESULTADO: 28 de 28
+U3S6;20205341;http://127.0.0.1:8000/productos;1111111111111111111111111111;DE3AC82C
