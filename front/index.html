@@ -1,0 +1,283 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Front de mi proyecto</title>
+<!--
+  front_inicial.html · Unidad III, Sesión 6 · Programación Distribuida (UdeC)
+  Una página que USA su API desde el navegador: login, lista, alta con errores por campo
+  y su endpoint con IA. Lo único que tienen que cambiar es el bloque CONFIG de abajo
+  (el kit lo arma a partir de su prueba.json).
+
+  Cómo abrirla (Windows, cmd):
+     cd front
+     python -m http.server 5500
+     y en el navegador:  http://127.0.0.1:5500
+  No la abran con doble clic: el origen sería "null" y su API no lo tendrá en su lista de CORS.
+-->
+<style>
+:root{--bg:#F3F5F9;--panel:#fff;--ink:#141C2B;--soft:#4F5A6B;--line:#DCE2EB;--blue:#2E5BE6;--blue-t:#E8EEFD;
+  --teal:#0C6259;--teal-t:#E2F5F2;--amber:#7A4E0E;--amber-t:#FCF0DC;--red:#9C3422;--red-t:#FBE9E6;
+  --mono:Consolas,'IBM Plex Mono',Menlo,monospace;--sans:'Segoe UI',system-ui,-apple-system,sans-serif}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:16px}
+button,input,select,textarea{font:inherit}
+:focus-visible{outline:3px solid var(--blue);outline-offset:2px}
+header{background:var(--ink);color:#fff;padding:14px 20px;display:flex;flex-wrap:wrap;gap:8px 16px;align-items:center;justify-content:space-between}
+header h1{font-size:20px;margin:0}
+header .info{font-family:var(--mono);font-size:13px;opacity:.85;overflow-wrap:anywhere}
+.card{min-width:0}
+header button{background:transparent;border:1px solid #fff6;color:#fff;border-radius:8px;padding:4px 12px;cursor:pointer}
+main{max-width:1100px;margin:0 auto;padding:18px 16px 40px;display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px 18px}
+.card h2{font-size:17px;margin:0 0 10px}
+.ancho{grid-column:1/-1}
+label{display:block;font-size:13px;font-weight:600;color:var(--soft);margin-top:8px}
+input,select,textarea{display:block;width:100%;margin-top:3px;border:1px solid #C9D1DD;border-radius:9px;padding:8px 10px;background:#fff}
+input.mal,select.mal,textarea.mal{border-color:var(--red);background:var(--red-t)}
+.err-campo{color:var(--red);font-size:13px;margin-top:3px}
+.btn{margin-top:12px;background:var(--blue);color:#fff;border:0;border-radius:10px;padding:9px 16px;font-weight:600;cursor:pointer}
+.btn:disabled{opacity:.55;cursor:wait}
+.msg{margin-top:10px;border-radius:10px;padding:9px 12px;font-size:14.5px}
+.msg.ok{background:var(--teal-t);color:var(--teal)}
+.msg.aviso{background:var(--amber-t);color:var(--amber)}
+.msg.mal{background:var(--red-t);color:var(--red)}
+.tabla{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:14px}
+th,td{text-align:left;padding:6px 8px;border-bottom:1px solid var(--line);vertical-align:top}
+th{font-size:12.5px;color:var(--soft);text-transform:uppercase;letter-spacing:.03em}
+.rueda{display:inline-block;width:16px;height:16px;border:3px solid var(--line);border-top-color:var(--blue);border-radius:50%;animation:g .8s linear infinite;vertical-align:-3px;margin-right:6px}
+@keyframes g{to{transform:rotate(360deg)}}
+.chips span{display:inline-block;background:var(--blue-t);color:#1F3FA8;border-radius:999px;padding:3px 10px;margin:3px 4px 0 0;font-size:14px}
+.chips b{font-weight:600}
+#registro{font-family:var(--mono);font-size:12.5px;line-height:1.6;max-height:180px;overflow:auto;margin:0;white-space:pre-wrap}
+.oculto{display:none}
+@media (max-width:760px){main{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<script>
+/* ===================== CONFIG: lo único que cambian ===================== */
+const CONFIG = {
+  nombre: "MiniPoS",
+  api: "http://127.0.0.1:8000",                      // la dirección de SU API
+  login: { ruta: "/login", campos: ["usuario","clave"], campo_token: "access_token" },
+  coleccion: { ruta: "/productos", titulo: "productos" },
+  nuevo: { ruta: "/productos", campos: [
+    { nombre: "nombre", tipo: "texto", ejemplo: "Producto de prueba Alex" },
+    { nombre: "precio", tipo: "numero", ejemplo: 35.5 },
+    { nombre: "stock", tipo: "numero", ejemplo: 20 },
+    { nombre: "codigo_barras", tipo: "texto", ejemplo: "7500000001534" }
+  ] },
+  ia: { metodo: "POST", ruta: "/productos/descripcion", campo: "nombre", fijos: {},
+        ejemplo: "Coca-Cola 600 ml" }
+};
+/* ======================================================================== */
+</script>
+
+<header>
+  <h1 id="titulo">Mi proyecto</h1>
+  <span class="info" id="info"></span>
+  <span><span class="info" id="quien"></span> <button id="salir" class="oculto">Salir</button></span>
+</header>
+
+<main>
+  <section class="card" id="cLogin">
+    <h2>Entrar</h2>
+    <form id="fLogin"></form>
+  </section>
+
+  <section class="card" id="cNuevo">
+    <h2 id="tNuevo">Nuevo</h2>
+    <form id="fNuevo"></form>
+  </section>
+
+  <section class="card" id="cIA">
+    <h2>Pregúntale a la IA</h2>
+    <form id="fIA">
+      <label for="iaTexto" id="iaEtq"></label>
+      <textarea id="iaTexto" rows="3"></textarea>
+      <button class="btn" id="iaBtn">Enviar</button>
+      <div id="iaRes"></div>
+    </form>
+  </section>
+
+  <section class="card ancho">
+    <h2 id="tLista">Lista</h2>
+    <div id="lista" class="tabla"></div>
+    <button class="btn" id="recargar" type="button">Volver a cargar</button>
+  </section>
+
+  <section class="card ancho">
+    <h2>Lo que la página le pidió a la API <span style="font-weight:400;color:var(--soft);font-size:13px">(lo mismo lo ven en F12 → Red / Network)</span></h2>
+    <pre id="registro"></pre>
+  </section>
+</main>
+
+<script>
+"use strict";
+const $ = s => document.querySelector(s);
+const esc = t => String(t ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+let TOKEN = null;
+try { TOKEN = sessionStorage.getItem('token_' + CONFIG.api); } catch (e) {}
+
+/* ---------- 1. Una sola función para hablar con la API ---------- */
+async function pedir(metodo, ruta, cuerpo) {
+  const h = { 'Accept': 'application/json' };
+  if (cuerpo !== undefined) h['Content-Type'] = 'application/json';
+  if (TOKEN) h['Authorization'] = 'Bearer ' + TOKEN;          // el token viaja en CADA petición
+  const t0 = performance.now();
+  let r;
+  try {
+    r = await fetch(CONFIG.api + ruta, { method: metodo, headers: h, body: cuerpo === undefined ? undefined : JSON.stringify(cuerpo) });
+  } catch (e) {
+    // fetch solo "truena" si no hubo respuesta que la página pueda leer: API apagada o CORS
+    anotar(`${metodo} ${ruta} → sin respuesta (¿API apagada? ¿CORS? Abran F12 → Consola)`);
+    return { codigo: 0, datos: null };
+  }
+  let datos = null;
+  const texto = await r.text();
+  try { datos = texto ? JSON.parse(texto) : null; } catch (e) { datos = { error: texto.slice(0, 200) }; }
+  anotar(`${metodo} ${ruta} → ${r.status} (${Math.round(performance.now() - t0)} ms)`);
+  return { codigo: r.status, datos };
+}
+
+/* ---------- 2. Qué hace la página con cada código de estado ---------- */
+function explicar(codigo, datos) {
+  const e = (datos && (datos.error || datos.message || datos.detail)) || '';
+  const txt = typeof e === 'string' ? e : '';
+  if (codigo === 0) return ['mal', 'No se pudo hablar con la API. ¿Está corriendo? Si sí, es CORS: abran F12 → Consola.'];
+  if (codigo === 401) { cerrarSesion(); return ['aviso', 'Tu sesión no es válida o expiró. Entra otra vez.']; }
+  if (codigo === 403) return ['aviso', 'Tu usuario no tiene permiso para esto.'];
+  if (codigo === 404) return ['aviso', 'No existe.'];
+  if (codigo === 409) return ['aviso', txt || 'Choca con algo que ya existe.'];
+  if (codigo === 422 || codigo === 400) return ['aviso', txt || 'Revisa los datos marcados.'];
+  if (codigo === 502 || codigo === 503 || codigo === 504) return ['aviso', (txt || 'El servicio externo no respondió.') + ' (no es tu culpa: intenta en un momento)'];
+  if (codigo >= 500) return ['mal', 'Error de la API (' + codigo + '). Revisen la consola donde corre su API.'];
+  return ['ok', txt];
+}
+function mensaje(el, tipo, texto) { el.innerHTML = texto ? `<div class="msg ${tipo}">${esc(texto)}</div>` : ''; }
+
+/* ---------- 3. Errores 422 por campo ---------- */
+// Entiende {"detalles": ["campo: mensaje"]}, el {"detail": [{loc, msg}]} de FastAPI y {"errors": [{path|param, msg}]} de Express
+function erroresPorCampo(datos) {
+  const m = {};
+  if (!datos) return m;
+  (Array.isArray(datos.detalles) ? datos.detalles : []).forEach(d => {
+    const s = String(d), i = s.indexOf(':');
+    if (i > 0) m[s.slice(0, i).trim().split('.').pop()] = s.slice(i + 1).trim();
+  });
+  (Array.isArray(datos.detail) ? datos.detail : []).forEach(d => { if (d.loc) m[String(d.loc[d.loc.length - 1])] = d.msg; });
+  (Array.isArray(datos.errors) ? datos.errors : []).forEach(d => { const k = d.path || d.param || d.field; if (k) m[k] = d.msg || d.message; });
+  return m;
+}
+
+/* ---------- Pantalla ---------- */
+function anotar(linea) { const r = $('#registro'); r.textContent = new Date().toLocaleTimeString() + '  ' + linea + '\n' + r.textContent; }
+function pintarSesion() {
+  $('#quien').textContent = TOKEN ? 'sesión iniciada' : (CONFIG.login ? 'sin sesión' : '');
+  $('#salir').classList.toggle('oculto', !TOKEN);
+  $('#cLogin').classList.toggle('oculto', !CONFIG.login || !!TOKEN);
+}
+function cerrarSesion() { TOKEN = null; try { sessionStorage.removeItem('token_' + CONFIG.api); } catch (e) {} pintarSesion(); }
+$('#salir').onclick = () => { cerrarSesion(); cargar(); };
+
+function armarFormularios() {
+  $('#titulo').textContent = CONFIG.nombre;
+  $('#info').textContent = 'API: ' + CONFIG.api + '  ·  esta página: ' + location.origin;
+  document.title = CONFIG.nombre;
+  if (CONFIG.login) {
+    $('#fLogin').innerHTML = CONFIG.login.campos.map((c, i) => `<label for="l_${c}">${esc(c)}</label><input id="l_${c}" ${i === CONFIG.login.campos.length - 1 ? 'type="password"' : ''} autocomplete="${i ? 'current-password' : 'username'}">`).join('') +
+      '<button class="btn">Entrar</button><div id="lMsg"></div>';
+  }
+  if (CONFIG.nuevo) {
+    $('#tNuevo').textContent = 'Nuevo · POST ' + CONFIG.nuevo.ruta;
+    $('#fNuevo').innerHTML = CONFIG.nuevo.campos.map(c => `<label for="n_${c.nombre}">${esc(c.nombre)}</label>` + (c.tipo === 'booleano'
+      ? `<select id="n_${c.nombre}"><option value="true">true</option><option value="false">false</option></select>`
+      : `<input id="n_${c.nombre}" ${c.tipo === 'numero' ? 'type="number" step="any"' : ''} placeholder="${esc(c.ejemplo ?? '')}">`) + `<div class="err-campo" id="e_${c.nombre}"></div>`).join('') +
+      '<button class="btn">Guardar</button><div id="nMsg"></div>';
+  } else $('#cNuevo').classList.add('oculto');
+  if (CONFIG.ia) {
+    $('#iaEtq').textContent = CONFIG.ia.campo + ' · ' + CONFIG.ia.metodo + ' ' + CONFIG.ia.ruta;
+    $('#iaTexto').placeholder = CONFIG.ia.ejemplo || '';
+  } else $('#cIA').classList.add('oculto');
+  $('#tLista').textContent = (CONFIG.coleccion.titulo || 'Lista') + ' · GET ' + CONFIG.coleccion.ruta;
+}
+
+/* ---------- Login ---------- */
+$('#fLogin').addEventListener('submit', async ev => {
+  ev.preventDefault();
+  const cuerpo = {};
+  CONFIG.login.campos.forEach(c => cuerpo[c] = $('#l_' + c).value);
+  const btn = ev.target.querySelector('button'); btn.disabled = true;
+  const { codigo, datos } = await pedir('POST', CONFIG.login.ruta, cuerpo);
+  btn.disabled = false;
+  const tok = datos && (datos[CONFIG.login.campo_token] || datos.access_token || datos.token || datos.jwt);
+  if (codigo === 200 && tok) {
+    TOKEN = tok;
+    try { sessionStorage.setItem('token_' + CONFIG.api, tok); } catch (e) {}
+    pintarSesion(); cargar();
+  } else if (codigo === 401) mensaje($('#lMsg'), 'mal', 'Usuario o clave incorrectos.');
+  else mensaje($('#lMsg'), ...explicar(codigo, datos));
+});
+
+/* ---------- Lista ---------- */
+async function cargar() {
+  $('#lista').innerHTML = '<span class="rueda"></span>Cargando…';
+  const { codigo, datos } = await pedir('GET', CONFIG.coleccion.ruta);
+  const filas = Array.isArray(datos) ? datos : (datos && (datos.datos || datos.data || datos.items || datos.resultados));
+  if (codigo === 200 && Array.isArray(filas)) {
+    if (!filas.length) { $('#lista').innerHTML = '<p>No hay registros todavía.</p>'; return; }
+    const cols = Object.keys(filas[0]).slice(0, 7);
+    $('#lista').innerHTML = `<table><tr>${cols.map(c => `<th>${esc(c)}</th>`).join('')}</tr>` +
+      filas.slice(0, 50).map(f => `<tr>${cols.map(c => `<td>${esc(typeof f[c] === 'object' ? JSON.stringify(f[c]) : f[c])}</td>`).join('')}</tr>`).join('') + '</table>';
+  } else {
+    const [t, m] = explicar(codigo, datos);
+    $('#lista').innerHTML = `<div class="msg ${t}">${esc(m || 'La respuesta no trae una lista.')}</div>`;
+  }
+}
+$('#recargar').onclick = cargar;
+
+/* ---------- Alta ---------- */
+$('#fNuevo').addEventListener('submit', async ev => {
+  ev.preventDefault();
+  const cuerpo = {};
+  CONFIG.nuevo.campos.forEach(c => {
+    const v = $('#n_' + c.nombre).value;
+    cuerpo[c.nombre] = c.tipo === 'numero' && v !== '' ? Number(v) : c.tipo === 'booleano' ? v === 'true' : v;
+    $('#n_' + c.nombre).classList.remove('mal'); $('#e_' + c.nombre).textContent = '';
+  });
+  const btn = ev.target.querySelector('button'); btn.disabled = true;
+  const { codigo, datos } = await pedir('POST', CONFIG.nuevo.ruta, cuerpo);
+  btn.disabled = false;
+  if (codigo === 201 || codigo === 200) { mensaje($('#nMsg'), 'ok', 'Guardado.'); ev.target.reset(); cargar(); return; }
+  const porCampo = erroresPorCampo(datos);
+  Object.entries(porCampo).forEach(([k, v]) => {
+    const inp = $('#n_' + k);
+    if (inp) { inp.classList.add('mal'); $('#e_' + k).textContent = v; }
+  });
+  mensaje($('#nMsg'), ...explicar(codigo, datos));
+});
+
+/* ---------- IA: rueda mientras espera, mensaje claro si falla ---------- */
+$('#fIA').addEventListener('submit', async ev => {
+  ev.preventDefault();
+  const texto = $('#iaTexto').value.trim() || CONFIG.ia.ejemplo || '';
+  const cuerpo = Object.assign({}, CONFIG.ia.fijos || {}, { [CONFIG.ia.campo]: texto });
+  const btn = $('#iaBtn'); btn.disabled = true;
+  const t0 = performance.now();
+  const reloj = setInterval(() => { $('#iaRes').innerHTML = `<div class="msg aviso"><span class="rueda"></span>Preguntando a la IA… ${((performance.now() - t0) / 1000).toFixed(1)} s</div>`; }, 100);
+  const { codigo, datos } = await pedir(CONFIG.ia.metodo || 'POST', CONFIG.ia.ruta, cuerpo);
+  clearInterval(reloj); btn.disabled = false;
+  if ((codigo === 200 || codigo === 201) && datos) {
+    const quitar = new Set(['id', 'usuario', 'fecha', 'equipo_id', CONFIG.ia.campo]);
+    $('#iaRes').innerHTML = '<div class="chips">' + Object.entries(datos).filter(([k]) => !quitar.has(k))
+      .map(([k, v]) => `<span><b>${esc(k)}:</b> ${esc(typeof v === 'object' ? JSON.stringify(v) : v)}</span>`).join('') + '</div>';
+  } else mensaje($('#iaRes'), ...explicar(codigo, datos));
+});
+
+armarFormularios(); pintarSesion(); cargar();
+</script>
+</body>
+</html>
