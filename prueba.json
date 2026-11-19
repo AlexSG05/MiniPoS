@@ -1,12 +1,14 @@
-
 {
   "matricula": "20205341",
   "base": "http://127.0.0.1:8000",
   "coleccion": "/productos",
   "campo_id": "id",
+  "cors": {
+    "origen": "http://127.0.0.1:5500"
+  },
   "valido": {
     "nombre": "Producto de prueba Alex",
-    "precio": 35.50,
+    "precio": 35.5,
     "stock": 20,
     "codigo_barras": "7500000001534"
   },
@@ -18,7 +20,7 @@
   },
   "cambio": {
     "nombre": "Producto actualizado Alex",
-    "precio": 40.00,
+    "precio": 40.0,
     "stock": 25,
     "codigo_barras": "7500000001541"
   },
@@ -45,7 +47,7 @@
     "coleccion": "/ventas",
     "valido": {
       "descripcion": "Venta de prueba de Alex",
-      "total": 150.00
+      "total": 150
     }
   },
   "externo": {
