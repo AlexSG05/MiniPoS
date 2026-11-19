@@ -45,6 +45,7 @@ app.add_middleware(
     allow_methods=["GET", "POST", "PUT", "DELETE"],
     allow_headers=["Authorization", "Content-Type"],  # sin Authorization, el token no pasa la pregunta previa
 )
+# ---------------------------------------------------------------------------------------
 
 bearer = HTTPBearer(auto_error=False)
 
