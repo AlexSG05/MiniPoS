@@ -1,11 +1,9 @@
 {
-  "matricula": "20205341",
+  "matricula": "20206742",
   "base": "http://127.0.0.1:8000",
   "coleccion": "/productos",
   "campo_id": "id",
-  "cors": {
-    "origen": "http://127.0.0.1:5500"
-  },
+  "cors": {"origen": "http://127.0.0.1:5500"},
   "valido": {
     "nombre": "Producto de prueba Alex",
     "precio": 35.5,
