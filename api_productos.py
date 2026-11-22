@@ -12,13 +12,16 @@ from fastapi.responses import JSONResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, Field
 
+from contextlib import contextmanager
+
 import json, os, urllib.request, urllib.error
 from fastapi import HTTPException
 
-SECRETO = os.environ.get(
-    "JWT_SECRETO",
-    "clave-de-desarrollo-cambiala-en-produccion-2026"
-)
+SECRETO = os.environ.get("JWT_SECRETO", "").strip()
+
+if not SECRETO:
+    raise RuntimeError("Configura JWT_SECRETO antes de iniciar MiniPoS")
+
 ALGORITMO = "HS256"
 DURACION_TOKEN_MINUTOS = 30
 
@@ -37,7 +40,14 @@ app = FastAPI(
 import os
 from fastapi.middleware.cors import CORSMiddleware
 
-ORIGENES = os.environ.get("CORS_ORIGENES", "http://127.0.0.1:5500,http://localhost:5500").split(",")
+ORIGENES = [
+    origen.strip()
+    for origen in os.environ.get("CORS_ORIGENES", "").split(",")
+    if origen.strip()
+]
+
+if not ORIGENES:
+    raise RuntimeError("Configura CORS_ORIGENES en el archivo .env")
 
 app.add_middleware(
     CORSMiddleware,
@@ -346,6 +356,20 @@ def codigo_repetido(codigo_barras: str, excepto: int = 0):
     finally:
         conexion.close()
 
+class CodigoBarrasDuplicado(Exception):
+    pass
+
+
+@contextmanager
+def guardar_cambios_producto(conexion):
+    try:
+        with conexion:
+            yield
+    except sqlite3.IntegrityError as error:
+        if error.sqlite_errorcode == sqlite3.SQLITE_CONSTRAINT_UNIQUE:
+            raise CodigoBarrasDuplicado() from error
+        raise
+
 
 @app.get(
     "/productos",
@@ -388,23 +412,17 @@ def crear_producto(
 ):
     conexion = obtener_conexion()
     try:
-        cursor = conexion.execute(
-            """
-            INSERT INTO productos
-                (nombre, precio, stock, codigo_barras)
-            VALUES (?, ?, ?, ?)
-            """,
-            (
-                datos.nombre,
-                datos.precio,
-                datos.stock,
-                datos.codigo_barras
+        with guardar_cambios_producto(conexion):
+            cursor = conexion.execute(
+                """
+                INSERT INTO productos
+                    (nombre, precio, stock, codigo_barras)
+                VALUES (?, ?, ?, ?)
+                """,
+                (datos.nombre, datos.precio, datos.stock, datos.codigo_barras)
             )
-        )
-        nuevo_id = cursor.lastrowid
-        conexion.commit()
-    except sqlite3.IntegrityError:
-        conexion.rollback()
+            nuevo_id = cursor.lastrowid
+    except CodigoBarrasDuplicado:
         raise HTTPException(
             status_code=409,
             detail="Ya existe un producto con ese código de barras"
@@ -429,23 +447,16 @@ def reemplazar_producto(
     buscar_producto(producto_id)
     conexion = obtener_conexion()
     try:
-        conexion.execute(
-            """
-            UPDATE productos
-            SET nombre = ?, precio = ?, stock = ?, codigo_barras = ?
-            WHERE id = ?
-            """,
-            (
-                datos.nombre,
-                datos.precio,
-                datos.stock,
-                datos.codigo_barras,
-                producto_id
+        with guardar_cambios_producto(conexion):
+            conexion.execute(
+                """
+                UPDATE productos
+                SET nombre = ?, precio = ?, stock = ?, codigo_barras = ?
+                WHERE id = ?
+                """,
+                (datos.nombre, datos.precio, datos.stock, datos.codigo_barras, producto_id)
             )
-        )
-        conexion.commit()
-    except sqlite3.IntegrityError:
-        conexion.rollback()
+    except CodigoBarrasDuplicado:
         raise HTTPException(
             status_code=409,
             detail="Ya existe un producto con ese código de barras"

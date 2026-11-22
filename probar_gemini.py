@@ -11,18 +11,22 @@ import time
 import urllib.error
 import urllib.request
 
+from pathlib import Path
+from dotenv import load_dotenv
+
+load_dotenv(Path(__file__).with_name(".env"))
+
 try:
     sys.stdout.reconfigure(encoding="utf-8")
 except Exception:
     pass
 
 BASE = "https://generativelanguage.googleapis.com/v1beta"
-clave = os.environ.get("GEMINI_API_KEY", "")
+clave = os.environ.get("GEMINI_API_KEY", "").strip()
 if not clave:
-    sys.exit("No encuentro la variable GEMINI_API_KEY.\n"
-             "Windows: Inicio > 'variables de entorno' > Variables de usuario > Nueva > GEMINI_API_KEY,\n"
-             "y abre una ventana NUEVA de cmd. Mac/Linux: export GEMINI_API_KEY=tu-clave")
-print(f"GEMINI_API_KEY: definida ({clave[:4]}…, {len(clave)} caracteres)\n")
+    sys.exit("Configura GEMINI_API_KEY en el archivo .env.")
+
+print("GEMINI_API_KEY: definida\n")
 
 
 def pedir(metodo, url, cuerpo=None):
@@ -61,8 +65,7 @@ for modelo in candidatos:
         if estado == 200:
             texto = d["candidates"][0]["content"]["parts"][0]["text"].strip()
             print(f"[OK] {modelo}: {texto}")
-            print(f"\nFunciona. Guarda el modelo para que lo use la API:\n   setx GEMINI_MODELO {modelo}\n"
-                  "y abre una ventana NUEVA de cmd antes de correr python puente.py")
+            print(f"\nFunciona. Puedes guardar GEMINI_MODELO={modelo} en el archivo .env.")
             sys.exit(0)
         msg = d.get("error", {}).get("message", "")[:90].replace("\n", " ")
         if estado in (429, 500, 503) and intento < 3:
@@ -73,5 +76,4 @@ for modelo in candidatos:
         print(f"[X ] {modelo}: {estado} {msg}")
         break
 
-print("\nNingún modelo respondió ahora. Tu clave SÍ es válida (Google contestó 503/429, no 401):")
-print("los servidores están saturados. Prueba en unos minutos. Mientras, todo funciona con la IA simulada.")
+sys.exit("Ningún modelo respondió correctamente. Revisa los estados impresos arriba.")
