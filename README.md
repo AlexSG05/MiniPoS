@@ -200,3 +200,8 @@ Aprendí que una prueba puede necesitar más de una ejecución. La primera vez o
 También entendí por qué conviene separar una regla de negocio del manejo de HTTP. El alta y la edición ahora comparten la lógica que detecta códigos de barras duplicados, y las rutas devuelven `409` cuando esa regla se incumple.
 
 Lo que más me costó fue entender por qué la prueba de persistencia quedaba pendiente al principio. Si MiniPoS se usara en una empresa, automatizaría el reinicio de la API y la segunda ronda para comprobar la persistencia con cada cambio.
+
+### ALEX
+
+Lo que más me costo o se me complico del proyecto fue un poco el manejo de las versiónes de git ya que al inicio no tenia un gran conocimiento con el git, pero a lo largo del transcurso del proyecto pude entender y comprender mas sobre los conocimientos, algun otro problema que pude tener fue la falta de conocimiento con unas tecnologias,
+lo que haria diferente si este fuera un proyecto de una empresa seria dedicarle mas tiempo y mas compromiso ya que por cuestiones de tiempo o de tareas no le dedique todo el tiempo que me hubiera gustado dedicarle para aprender mucho.
