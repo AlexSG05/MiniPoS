@@ -205,3 +205,8 @@ Lo que más me costó fue entender por qué la prueba de persistencia quedaba pe
 
 Lo que más me costo o se me complico del proyecto fue un poco el manejo de las versiónes de git ya que al inicio no tenia un gran conocimiento con el git, pero a lo largo del transcurso del proyecto pude entender y comprender mas sobre los conocimientos, algun otro problema que pude tener fue la falta de conocimiento con unas tecnologias,
 lo que haria diferente si este fuera un proyecto de una empresa seria dedicarle mas tiempo y mas compromiso ya que por cuestiones de tiempo o de tareas no le dedique todo el tiempo que me hubiera gustado dedicarle para aprender mucho.
+
+### Maribel
+
+Lo que mas me costó sobre este proyecto fue memorizar cada codigo de error http, y entender cuales y porque mi api debia mandarlos dependiendo de la situación de la petición.
+Lo que haría diferente si fuera un proyecto de una empresa sería una base que soporte mejor el acceso simultáneo y prepararía copias de seguridad para recuperar la información si ocurre un problema.
