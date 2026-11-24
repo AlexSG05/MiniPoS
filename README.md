@@ -187,19 +187,11 @@ Seguridad en capas (1/1)
   [x] Puedo decir qué riesgo del OWASP API Top 10 evita cada capa de mi API.
   En la presentación: Cierren la presentación con la tabla “riesgo → cómo lo evita mi API”.
 
-C:\Users\omard\Documents\Codex\2026-11-21\new-chat\work\MiniPoS-revision-equipo
-
 ## Reflexiones del equipo
-
-<!-- Aquí va la reflexión de cada compañero. -->
 
 ### Omar
 
-Aprendí que una prueba puede necesitar más de una ejecución. La primera vez obtuve 27 de 28 porque faltaba comprobar la persistencia. Después de reiniciar la API y volver a correr las pruebas, obtuve 28 de 28 y confirmé que SQLite conservó los datos.
-
-También entendí por qué conviene separar una regla de negocio del manejo de HTTP. El alta y la edición ahora comparten la lógica que detecta códigos de barras duplicados, y las rutas devuelven `409` cuando esa regla se incumple.
-
-Lo que más me costó fue entender por qué la prueba de persistencia quedaba pendiente al principio. Si MiniPoS se usara en una empresa, automatizaría el reinicio de la API y la segunda ronda para comprobar la persistencia con cada cambio.
+Lo que más me costó del proyecto fue entender por qué me salían 27 de 28 pruebas. Después entendí que tenía que reiniciar la API y volver a correrlas para ver si los datos seguían guardados. Si esto fuera un proyecto de una empresa, haría que esa prueba se corriera sola cada vez que hiciéramos un cambio.
 
 ### ALEX
 
